@@ -276,3 +276,57 @@ const loadProjectLogs = async (projectId) => {
     document.getElementById('logs-content').textContent = data.logs || 'No logs available';
   }
 };
+
+// File Manager Uploads
+const fileInput = document.getElementById('file-input');
+const uploadBtn = document.getElementById('upload-btn');
+const fileList = document.getElementById('file-list');
+
+uploadBtn.addEventListener('click', () => {
+  if (!document.getElementById('project-select').value) return alert('Please select a project first');
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', (e) => {
+  handleUploads(e.target.files);
+});
+
+// Drag & Drop
+fileList.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  fileList.classList.add('drag-over');
+});
+
+fileList.addEventListener('dragleave', () => {
+  fileList.classList.remove('drag-over');
+});
+
+fileList.addEventListener('drop', (e) => {
+  e.preventDefault();
+  fileList.classList.remove('drag-over');
+  handleUploads(e.dataTransfer.files);
+});
+
+const handleUploads = async (files) => {
+  if (files.length === 0) return;
+  
+  const formData = new FormData();
+  for (let i = 0; i < files.length; i++) {
+    formData.append('files', files[i]);
+  }
+  formData.append('path', currentPath);
+
+  const res = await fetch('/api/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    body: formData
+  });
+
+  if (res.ok) {
+    loadFiles(currentPath);
+  } else {
+    alert('Upload failed');
+  }
+};

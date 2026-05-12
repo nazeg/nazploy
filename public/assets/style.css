@@ -208,6 +208,12 @@ input, select, textarea {
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
+  transition: background 0.2s;
+}
+
+.file-list.drag-over {
+  background: rgba(187, 134, 252, 0.1);
+  border: 2px dashed var(--primary);
 }
 
 .file-item {
