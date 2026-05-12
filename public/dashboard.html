@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Dashboard</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>Dashboard</h1>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-target="projects-view">Projects</a>
+        <a href="#" class="nav-item" data-target="files-view">Files</a>
+        <a href="#" class="nav-item" data-target="logs-view">Logs</a>
+      </nav>
+      <div class="system-stats">
+        <h3>System Stats</h3>
+        <div id="stats-content">Loading...</div>
+      </div>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="btn btn-outline">Logout</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <!-- Projects View -->
+      <section id="projects-view" class="view-section active">
+        <div class="header-actions">
+          <h2>Projects</h2>
+          <button id="new-project-btn" class="btn btn-primary">New Project</button>
+        </div>
+        <div id="projects-list" class="grid-list">
+          <!-- Projects will be rendered here -->
+        </div>
+      </section>
+
+      <!-- Files View -->
+      <section id="files-view" class="view-section" style="display: none;">
+        <h2>File Manager</h2>
+        <div class="file-manager">
+          <div class="file-manager-header">
+            <select id="project-select" class="form-control" style="width: auto;">
+              <option value="">Select Project</option>
+            </select>
+            <div id="current-path" class="path-display">/</div>
+          </div>
+          <div class="file-manager-body">
+            <div id="file-list" class="file-list">
+              <!-- Files will be rendered here -->
+            </div>
+            <div class="file-editor" id="file-editor-container" style="display: none;">
+              <div class="editor-header">
+                <span id="editing-filename"></span>
+                <button id="save-file-btn" class="btn btn-primary btn-sm">Save</button>
+                <button id="close-editor-btn" class="btn btn-outline btn-sm">Close</button>
+              </div>
+              <textarea id="file-content" class="editor-textarea"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Logs View -->
+      <section id="logs-view" class="view-section" style="display: none;">
+        <h2>Process Logs</h2>
+        <div class="logs-header">
+          <select id="log-project-select" class="form-control" style="width: auto;">
+            <option value="">Select Project</option>
+          </select>
+          <span class="auto-refresh-text">Auto-refreshing every 5s</span>
+        </div>
+        <div class="logs-container">
+          <pre id="logs-content" class="logs-output">Select a project to view logs...</pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- New Project Modal -->
+  <div id="project-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>New Project</h3>
+        <span class="close-modal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <form id="new-project-form">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="p-name" required>
+          </div>
+          <div class="form-group">
+            <label>Slug (folder name)</label>
+            <input type="text" id="p-slug" required>
+          </div>
+          <div class="form-group">
+            <label>Domain</label>
+            <input type="text" id="p-domain" required>
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select id="p-type" required>
+              <option value="node">Node.js</option>
+              <option value="static">Static</option>
+            </select>
+          </div>
+          <div class="form-group" id="port-group">
+            <label>Port</label>
+            <input type="number" id="p-port">
+          </div>
+          <div class="form-group" id="entry-group">
+            <label>Entry File (e.g. index.js)</label>
+            <input type="text" id="p-entry">
+          </div>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

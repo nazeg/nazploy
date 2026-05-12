@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Server Dashboard</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <h2>Server Dashboard</h2>
+    <form id="login-form">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="username" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Login</button>
+      <div id="error-message" class="text-danger mt-2"></div>
+    </form>
+  </div>
+
+  <script>
+    if (localStorage.getItem('token')) {
+      window.location.href = '/dashboard';
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errDiv = document.getElementById('error-message');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          localStorage.setItem('token', data.token);
+          window.location.href = '/dashboard';
+        } else {
+          errDiv.textContent = data.error || 'Login failed';
+        }
+      } catch (err) {
+        errDiv.textContent = 'Network error';
+      }
+    });
+  </script>
+</body>
+</html>
