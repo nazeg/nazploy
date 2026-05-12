@@ -311,10 +311,10 @@ const handleUploads = async (files) => {
   if (files.length === 0) return;
   
   const formData = new FormData();
+  formData.append('path', currentPath);
   for (let i = 0; i < files.length; i++) {
     formData.append('files', files[i]);
   }
-  formData.append('path', currentPath);
 
   const res = await fetch('/api/files/upload', {
     method: 'POST',
