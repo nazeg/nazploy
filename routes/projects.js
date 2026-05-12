@@ -45,6 +45,14 @@ router.post('/', (req, res) => {
       fs.mkdirSync(rootPath, { recursive: true });
     }
 
+    // Create default index.html for static projects
+    if (type === 'static') {
+      const indexPath = path.join(rootPath, 'index.html');
+      if (!fs.existsSync(indexPath)) {
+        fs.writeFileSync(indexPath, 'OK', 'utf-8');
+      }
+    }
+
     // Create nginx config ONLY if domain is provided
     if (domain) {
       saveAndEnableConfig({ slug, domain, type, port });
