@@ -6,7 +6,7 @@ sudo mkdir -p /var/www /opt/pocketbase /var/pb-data
 sudo chown -R $USER:$USER /var/www /var/pb-data
 
 # npm bağımlılıklarını kur
-cd /opt/dashboard && npm install
+npm install
 
 # PM2'yi global kur (yoksa)
 which pm2 || sudo npm install -g pm2

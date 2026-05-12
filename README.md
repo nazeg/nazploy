@@ -4,7 +4,7 @@ Minimalist server management dashboard for managing multiple web projects, PM2 p
 
 ## Installation
 
-1. Clone the repository to `/opt/dashboard` on your Ubuntu server.
+1. Clone the repository to your Ubuntu server (e.g., `~/nazploy2` or `/opt/dashboard`).
 2. Copy `.env.example` to `.env` and modify the values as needed.
 3. Run the installation script:
 
