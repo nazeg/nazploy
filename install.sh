@@ -16,19 +16,25 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 2. Dizinlerin Oluşturulması
-echo -e "\n${BLUE}[Aşama 1/4] Dizinler hazırlanıyor...${NC}"
+# 2. Sistem Bağımlılıklarının Kurulması
+echo -e "\n${BLUE}[Aşama 1/5] Sistem bağımlılıkları kontrol ediliyor...${NC}"
+apt update
+apt install -y build-essential curl unzip git
+echo -e "${GREEN}✅ Sistem bağımlılıkları hazır.${NC}"
+
+# 3. Dizinlerin Oluşturulması
+echo -e "\n${BLUE}[Aşama 2/5] Dizinler hazırlanıyor...${NC}"
 mkdir -p /var/www /opt/pocketbase /var/pb-data
 chown -R $USER:$USER /var/www /opt/pocketbase /var/pb-data
 echo -e "${GREEN}✅ Dizinler ve izinler hazır.${NC}"
 
-# 3. Bağımlılıkların Kurulması
-echo -e "\n${BLUE}[Aşama 2/4] Node.js bağımlılıkları kuruluyor...${NC}"
+# 4. Bağımlılıkların Kurulması
+echo -e "\n${BLUE}[Aşama 3/5] Node.js bağımlılıkları kuruluyor...${NC}"
 npm install
 echo -e "${GREEN}✅ Bağımlılıklar kuruldu.${NC}"
 
-# 4. PM2 Kontrolü ve Kurulumu
-echo -e "\n${BLUE}[Aşama 3/4] PM2 kontrol ediliyor...${NC}"
+# 5. PM2 Kontrolü ve Kurulumu
+echo -e "\n${BLUE}[Aşama 4/5] PM2 kontrol ediliyor...${NC}"
 if ! command -v pm2 &> /dev/null; then
     echo -e "${YELLOW}PM2 bulunamadı, kuruluyor...${NC}"
     npm install -g pm2
@@ -36,8 +42,8 @@ else
     echo -e "${GREEN}PM2 zaten kurulu.${NC}"
 fi
 
-# 5. Başlatma
-echo -e "\n${BLUE}[Aşama 4/4] Dashboard başlatılıyor...${NC}"
+# 6. Başlatma
+echo -e "\n${BLUE}[Aşama 5/5] Dashboard başlatılıyor...${NC}"
 pm2 start index.js --name "dashboard"
 pm2 save
 # PM2 startup komutu root olarak çalıştırıldığında sistemi otomatik yapılandırır
