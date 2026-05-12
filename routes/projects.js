@@ -35,10 +35,16 @@ router.post('/', (req, res) => {
   const rootPath = path.join(WWW_ROOT, slug);
 
   try {
-    db.prepare(`
+    let finalPort = port;
+    if (!finalPort) {
+      const lastProject = db.prepare('SELECT MAX(port) as maxPort FROM projects').get();
+      finalPort = lastProject.maxPort ? lastProject.maxPort + 1 : 8080;
+    }
+
+    const info = db.prepare(`
       INSERT INTO projects (name, slug, domain, type, root_path, port, entry_file, env_vars)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, slug, domain || null, type, rootPath, port || null, entry_file || null, env_vars ? JSON.stringify(env_vars) : null);
+    `).run(name, slug, domain || null, type, rootPath, finalPort, entry_file || null, env_vars ? JSON.stringify(env_vars) : null);
 
     // Create directory
     if (!fs.existsSync(rootPath)) {
@@ -53,11 +59,11 @@ router.post('/', (req, res) => {
       }
     }
 
-    // Create nginx config ONLY if domain is provided
-    if (domain) {
-      saveAndEnableConfig({ slug, domain, type, port });
-      try { reloadNginx(); } catch(e) { console.error('Initial nginx reload failed', e); }
-    }
+    const updatedProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(info.lastInsertRowid);
+    
+    // Always create nginx config to support port-based access
+    saveAndEnableConfig(updatedProject);
+    try { reloadNginx(); } catch(e) { console.error('Nginx reload fail', e); }
 
     res.status(201).json({ message: 'Project created successfully' });
   } catch (error) {

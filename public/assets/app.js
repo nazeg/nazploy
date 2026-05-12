@@ -91,7 +91,7 @@ const loadProjects = async () => {
           <div class="card-body">
             <div>Domain: ${p.domain || '<span class="text-secondary">Not set</span>'}</div>
             <div>Type: ${p.type}</div>
-            ${p.type === 'node' ? `<div>Port: ${p.port}</div>` : ''}
+            ${p.port ? `<div>Port: ${p.port}</div>` : ''}
             ${pbHtml}
           </div>
           <div class="card-actions">
