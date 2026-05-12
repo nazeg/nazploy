@@ -89,7 +89,7 @@ const loadProjects = async () => {
             <span class="badge ${p.status}">${p.status}</span>
           </div>
           <div class="card-body">
-            <div>Domain: ${p.domain}</div>
+            <div>Domain: ${p.domain || '<span class="text-secondary">Not set</span>'}</div>
             <div>Type: ${p.type}</div>
             ${p.type === 'node' ? `<div>Port: ${p.port}</div>` : ''}
             ${pbHtml}
@@ -100,6 +100,7 @@ const loadProjects = async () => {
               <button onclick="actionProject(${p.id}, 'stop')" class="btn btn-outline btn-sm">Stop</button>
               <button onclick="actionProject(${p.id}, 'restart')" class="btn btn-outline btn-sm">Restart</button>
             ` : ''}
+            <button onclick="editProject(${p.id}, '${p.name}', '${p.domain || ''}', ${p.port || 'null'})" class="btn btn-outline btn-sm">Edit</button>
             <button onclick="deleteProject(${p.id})" class="btn btn-danger btn-sm">Delete</button>
           </div>
         </div>
@@ -107,6 +108,24 @@ const loadProjects = async () => {
     });
   } catch (e) {
     console.error('Projects load error', e);
+  }
+};
+
+window.editProject = async (id, name, domain, port) => {
+  const newDomain = prompt('Enter new domain:', domain);
+  if (newDomain === null) return;
+  const newName = prompt('Enter new name:', name);
+  if (newName === null) return;
+
+  const res = await fetchAPI(`/projects/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name: newName, domain: newDomain })
+  });
+
+  if (res.ok) {
+    loadProjects();
+  } else {
+    alert('Update failed');
   }
 };
 

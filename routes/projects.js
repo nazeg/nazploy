@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   const { name, slug, domain, type, port, entry_file, env_vars } = req.body;
   
-  if (!name || !slug || !domain || !type) {
+  if (!name || !slug || !type) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -38,16 +38,18 @@ router.post('/', (req, res) => {
     db.prepare(`
       INSERT INTO projects (name, slug, domain, type, root_path, port, entry_file, env_vars)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, slug, domain, type, rootPath, port || null, entry_file || null, env_vars ? JSON.stringify(env_vars) : null);
+    `).run(name, slug, domain || null, type, rootPath, port || null, entry_file || null, env_vars ? JSON.stringify(env_vars) : null);
 
     // Create directory
     if (!fs.existsSync(rootPath)) {
       fs.mkdirSync(rootPath, { recursive: true });
     }
 
-    // Create nginx config
-    saveAndEnableConfig({ slug, domain, type, port });
-    reloadNginx();
+    // Create nginx config ONLY if domain is provided
+    if (domain) {
+      saveAndEnableConfig({ slug, domain, type, port });
+      try { reloadNginx(); } catch(e) { console.error('Initial nginx reload failed', e); }
+    }
 
     res.status(201).json({ message: 'Project created successfully' });
   } catch (error) {
@@ -59,8 +61,30 @@ router.post('/', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
-  // Update logic...
-  res.status(501).json({ error: 'Not implemented yet' });
+  const { name, domain, port, entry_file } = req.body;
+  const projectId = req.params.id;
+
+  try {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    db.prepare(`
+      UPDATE projects 
+      SET name = ?, domain = ?, port = ?, entry_file = ?
+      WHERE id = ?
+    `).run(name || project.name, domain || project.domain, port || project.port, entry_file || project.entry_file, projectId);
+
+    // If domain was added or changed, update Nginx
+    const updatedProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    if (updatedProject.domain) {
+      saveAndEnableConfig(updatedProject);
+      try { reloadNginx(); } catch(e) {}
+    }
+
+    res.json({ message: 'Project updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.delete('/:id', async (req, res) => {
