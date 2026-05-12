@@ -18,8 +18,12 @@ fi
 
 # 2. Sistem Bağımlılıklarının Kurulması
 echo -e "\n${BLUE}[Aşama 1/5] Sistem bağımlılıkları kontrol ediliyor...${NC}"
-apt update
-apt install -y build-essential gcc g++ make curl unzip git
+apt-get update
+apt-get install -y build-essential gcc g++ make curl unzip git
+# cc linki yoksa manuel oluştur (bazı minimal sistemlerde gerekebilir)
+if ! command -v cc &> /dev/null; then
+    ln -s /usr/bin/gcc /usr/bin/cc
+fi
 echo -e "${GREEN}✅ Sistem bağımlılıkları hazır.${NC}"
 
 # 3. Dizinlerin Oluşturulması
