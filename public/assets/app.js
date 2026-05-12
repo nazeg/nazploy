@@ -74,6 +74,16 @@ const loadProjects = async () => {
       projectSelect.innerHTML += opt;
       logSelect.innerHTML += optId;
 
+      // Status & Link Logic
+      const isStatic = p.type === 'static';
+      const statusText = isStatic ? 'Active' : p.status;
+      const statusClass = isStatic ? 'running' : p.status;
+      
+      // Link Construction
+      const host = p.domain || window.location.hostname;
+      const portSuffix = p.port && p.port !== 80 ? `:${p.port}` : '';
+      const projectUrl = `http://${host}${portSuffix}`;
+
       // Card
       let pbHtml = '';
       if (p.pocketbase) {
@@ -86,12 +96,17 @@ const loadProjects = async () => {
         <div class="card">
           <div class="card-header">
             <h3>${p.name}</h3>
-            <span class="badge ${p.status}">${p.status}</span>
+            <span class="badge ${statusClass}">${statusText}</span>
           </div>
           <div class="card-body">
             <div>Domain: ${p.domain || '<span class="text-secondary">Not set</span>'}</div>
             <div>Type: ${p.type}</div>
             ${p.port ? `<div>Port: ${p.port}</div>` : ''}
+            <div style="margin-top: 10px;">
+              <a href="${projectUrl}" target="_blank" class="btn btn-primary btn-sm" style="width: 100%; text-decoration: none;">
+                 Open Project ↗
+              </a>
+            </div>
             ${pbHtml}
           </div>
           <div class="card-actions">
