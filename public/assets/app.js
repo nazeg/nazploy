@@ -87,9 +87,40 @@ const loadProjects = async () => {
       // Card
       let pbHtml = '';
       if (p.pocketbase) {
-        pbHtml = `<div style="margin-top:0.5rem;font-size:0.8rem">PB Port: ${p.pocketbase.port} <button onclick="actionPB(${p.id}, '${p.pocketbase.status === 'running' ? 'stop' : 'start'}')" class="btn btn-outline btn-sm">${p.pocketbase.status === 'running' ? 'Stop PB' : 'Start PB'}</button> <button onclick="deletePB(${p.id})" class="btn btn-danger btn-sm">Del PB</button></div>`;
+        const pbIsRunning = p.pocketbase.status === 'running';
+        const pbAdminUrl = `http://${host}:${p.pocketbase.port}/_/#/login`;
+        
+        pbHtml = `
+          <div class="pb-instance-box ${pbIsRunning ? 'active' : ''}">
+            <div class="pb-header">
+              <span class="pb-title">PocketBase</span>
+              <span class="pb-status-dot ${pbIsRunning ? 'online' : 'offline'}"></span>
+              <span class="pb-port">Port: ${p.pocketbase.port}</span>
+            </div>
+            <div class="pb-actions">
+              ${pbIsRunning ? `
+                <a href="${pbAdminUrl}" target="_blank" class="btn btn-outline btn-sm pb-admin-btn">
+                  Admin Panel ↗
+                </a>
+              ` : ''}
+              <button onclick="actionPB(${p.id}, '${pbIsRunning ? 'stop' : 'start'}')" 
+                      class="btn ${pbIsRunning ? 'btn-danger-soft' : 'btn-success-soft'} btn-sm">
+                ${pbIsRunning ? 'Stop' : 'Start'}
+              </button>
+              <button onclick="deletePB(${p.id})" class="btn btn-icon-only btn-danger-soft btn-sm" title="Delete PB">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `;
       } else {
-        pbHtml = `<div style="margin-top:0.5rem"><button onclick="addPB(${p.id})" class="btn btn-outline btn-sm">Add PocketBase</button></div>`;
+        pbHtml = `
+          <div class="pb-empty-box">
+            <button onclick="addPB(${p.id})" class="btn btn-outline btn-sm btn-full">
+              + Add PocketBase Instance
+            </button>
+          </div>
+        `;
       }
 
       list.innerHTML += `
@@ -99,12 +130,17 @@ const loadProjects = async () => {
             <span class="badge ${statusClass}">${statusText}</span>
           </div>
           <div class="card-body">
-            <div>Domain: ${p.domain || '<span class="text-secondary">Not set</span>'}</div>
-            <div>Type: ${p.type}</div>
-            ${p.port ? `<div>Port: ${p.port}</div>` : ''}
-            <div style="margin-top: 10px;">
-              <a href="${projectUrl}" target="_blank" class="btn btn-primary btn-sm" style="width: 100%; text-decoration: none;">
-                 Open Project ↗
+            <div class="card-meta">
+              <span class="meta-label">Domain:</span>
+              <span class="meta-value">${p.domain || 'Not set'}</span>
+            </div>
+            <div class="card-meta">
+              <span class="meta-label">Type:</span>
+              <span class="meta-value">${p.type}</span>
+            </div>
+            <div style="margin-top: 15px;">
+              <a href="${projectUrl}" target="_blank" class="btn btn-primary btn-sm btn-full">
+                 Launch Site ↗
               </a>
             </div>
             ${pbHtml}
@@ -115,11 +151,13 @@ const loadProjects = async () => {
               <button onclick="actionProject(${p.id}, 'stop')" class="btn btn-outline btn-sm">Stop</button>
               <button onclick="actionProject(${p.id}, 'restart')" class="btn btn-outline btn-sm">Restart</button>
             ` : ''}
+            <div class="action-divider"></div>
             <button onclick="editProject(${p.id}, '${p.name}', '${p.domain || ''}', ${p.port || 'null'})" class="btn btn-outline btn-sm">Edit</button>
             <button onclick="deleteProject(${p.id})" class="btn btn-danger btn-sm">Delete</button>
           </div>
         </div>
       `;
+
     });
   } catch (e) {
     console.error('Projects load error', e);
