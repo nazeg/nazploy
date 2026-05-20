@@ -51,8 +51,8 @@ mkdir -p /root/dashboard
 # 5. Frontend Derleme (Build)
 echo "-> Frontend bağımlılıkları yükleniyor ve derleniyor..."
 cd web
-npm install
-npm run build
+npm install --unsafe-perm=true --include=dev
+npm run build --unsafe-perm=true
 cd ..
 
 # 6. Backend Derleme (Build)
