@@ -271,16 +271,33 @@ export default function SiteDetail() {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold">SSL / Let's Encrypt</h2>
-              <button
-                onClick={toggleSSL}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  site.ssl_status === 'active'
-                    ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                    : 'bg-green-50 text-green-600 hover:bg-green-100'
-                }`}
-              >
-                {site.ssl_status === 'active' ? 'SSL\'yi Kaldır' : 'SSL Ekle'}
-              </button>
+              <div className="flex gap-2">
+                {site.ssl_status === 'error' && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await pb.send(`/api/dashboard/sites/${id}/ssl/disable`, { method: 'POST' })
+                        loadSite()
+                      } catch (err: any) {
+                        alert('Sıfırlama işlemi başarısız: ' + (err?.message || ''))
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                  >
+                    Sıfırla
+                  </button>
+                )}
+                <button
+                  onClick={toggleSSL}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    site.ssl_status === 'active'
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'bg-green-50 text-green-600 hover:bg-green-100'
+                  }`}
+                >
+                  {site.ssl_status === 'active' ? 'SSL\'yi Kaldır' : 'SSL Ekle'}
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
