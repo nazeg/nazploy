@@ -75,6 +75,9 @@ func main() {
 		g.GET("/sites/{id}/logs", func(e *core.RequestEvent) error {
 			return dashboard.HandleGetSiteLogs(e, app)
 		})
+		g.POST("/sites/{id}/logs/clear", func(e *core.RequestEvent) error {
+			return dashboard.HandleClearSiteLogs(e, app)
+		})
 
 		// Databases (per-site Pocketbase instances)
 		g.POST("/sites/{id}/databases", func(e *core.RequestEvent) error {

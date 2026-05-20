@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== VPS Dashboard Otomatik Kurulum Sihirbazı ==="
+echo "=== Nazploy Otomatik Kurulum Sihirbazı ==="
 echo "Bu betik gerekli paketleri kuracak, projeyi derleyecek ve servisi başlatacaktır."
 echo ""
 
@@ -30,13 +30,13 @@ if ! command -v node &> /dev/null; then
 fi
 
 # 3. Projenin Klonlanması
-if [ ! -d "/root/dashboard-src" ]; then
+if [ ! -d "/root/nazploy-src" ]; then
   echo "-> Proje GitHub'dan klonlanıyor..."
-  git clone https://github.com/nazeg/dashboard.git /root/dashboard-src
-  cd /root/dashboard-src
+  git clone https://github.com/nazeg/nazploy.git /root/nazploy-src
+  cd /root/nazploy-src
 else
   echo "-> Proje güncelleniyor (git pull)..."
-  cd /root/dashboard-src
+  cd /root/nazploy-src
   # Bekleyen yerel değişiklikler varsa temizle
   git reset --hard
   git pull
@@ -46,15 +46,15 @@ fi
 echo "-> Gerekli klasörler oluşturuluyor..."
 mkdir -p /var/lib/dashboard/databases
 mkdir -p /var/www
-mkdir -p /root/dashboard
+mkdir -p /root/nazploy
 
 # Resmi PocketBase v0.30.2 temiz binary indirme (alt database örnekleri için)
-if [ ! -f "/root/dashboard/pocketbase_bin" ]; then
+if [ ! -f "/root/nazploy/pocketbase_bin" ]; then
   echo "-> PocketBase temiz resmi binary indiriliyor..."
   curl -L -o /tmp/pb.zip https://github.com/pocketbase/pocketbase/releases/download/v0.30.2/pocketbase_0.30.2_linux_amd64.zip
   unzip -o /tmp/pb.zip pocketbase -d /tmp/
-  mv /tmp/pocketbase /root/dashboard/pocketbase_bin
-  chmod +x /root/dashboard/pocketbase_bin
+  mv /tmp/pocketbase /root/nazploy/pocketbase_bin
+  chmod +x /root/nazploy/pocketbase_bin
   rm -f /tmp/pb.zip
 fi
 
@@ -68,7 +68,7 @@ cd ..
 
 # 6. Backend Derleme (Build)
 echo "-> Backend derleniyor..."
-/snap/bin/go build -o /root/dashboard/dashboard .
+/snap/bin/go build -o /root/nazploy/nazploy .
 
 # 7. Geçici dosyalar temizleniyor
 echo "-> Temizlik yapılıyor..."
@@ -79,16 +79,24 @@ echo "-> Arka plan servisi oluşturuluyor..."
 DEPLOY_USER=${SUDO_USER:-root}
 echo "-> Tespit edilen deploy kullanıcısı: $DEPLOY_USER"
 
-cat <<EOF > /etc/systemd/system/dashboard.service
+# Eski dashboard servisini durdur ve sil (eğer varsa geçiş için kolaylık)
+if systemctl is-active --quiet dashboard; then
+  echo "-> Eski dashboard servisi durduruluyor..."
+  systemctl stop dashboard
+  systemctl disable dashboard
+  rm -f /etc/systemd/system/dashboard.service
+fi
+
+cat <<EOF > /etc/systemd/system/nazploy.service
 [Unit]
-Description=VPS Dashboard Manager
+Description=Nazploy Site Manager
 After=network.target nginx.service
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/dashboard
-ExecStart=/root/dashboard/dashboard serve --http=0.0.0.0:8090
+WorkingDirectory=/root/nazploy
+ExecStart=/root/nazploy/nazploy serve --http=0.0.0.0:8090
 Restart=always
 Environment=DEPLOY_USER=$DEPLOY_USER
 
@@ -99,14 +107,14 @@ EOF
 # 9. Servisleri Başlatma
 echo "-> Servisler başlatılıyor..."
 systemctl daemon-reload
-systemctl enable dashboard
-systemctl restart dashboard
+systemctl enable nazploy
+systemctl restart nazploy
 
 # 10. Durum Kontrolü
 echo ""
 echo "=== KURULUM TAMAMLANDI ==="
-echo "VPS Dashboard başarıyla kuruldu ve başlatıldı!"
+echo "Nazploy başarıyla kuruldu ve başlatıldı!"
 echo "Yönetim Paneli Adresi: http://$(curl -s https://ipinfo.io/ip):8090"
 echo "--------------------------------------------------------"
 # journalctl satırları kırpmaz, böylece kurulum linki tam haliyle ekranda görünür
-journalctl -u dashboard -n 15 --no-pager
+journalctl -u nazploy -n 15 --no-pager

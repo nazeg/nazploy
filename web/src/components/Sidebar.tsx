@@ -13,7 +13,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-slate-900 text-white flex flex-col">
       <div className="p-5 border-b border-slate-700">
-        <h1 className="text-xl font-bold tracking-tight">VPS Dashboard</h1>
+        <h1 className="text-xl font-bold tracking-tight">Nazploy</h1>
         <p className="text-xs text-slate-400 mt-1">{user?.email}</p>
       </div>
 

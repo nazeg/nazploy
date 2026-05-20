@@ -39,6 +39,18 @@ export default function SiteDetail() {
     }
   }
 
+  async function clearLogs() {
+    if (!id || !window.confirm("Bu log dosyasını temizlemek istediğinize emin misiniz?")) return
+    try {
+      await pb.send(`/api/dashboard/sites/${id}/logs/clear?type=${logType}`, {
+        method: 'POST',
+      })
+      setLogs('Log dosyası temizlendi.')
+    } catch (err: any) {
+      alert('Hata: Log dosyası temizlenemedi. ' + (err?.message || ''))
+    }
+  }
+
   useEffect(() => {
     loadLogs()
   }, [id, logType])
@@ -375,6 +387,14 @@ export default function SiteDetail() {
                   />
                   Canlı Akış
                 </label>
+                {logType !== 'service' && (
+                  <button
+                    onClick={clearLogs}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Temizle
+                  </button>
+                )}
                 <button
                   onClick={loadLogs}
                   disabled={logsLoading}

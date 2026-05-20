@@ -82,3 +82,37 @@ func readLastLines(filePath string, lineCount int) (string, error) {
 	}
 	return string(out), nil
 }
+
+func HandleClearSiteLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	siteId := e.Request.PathValue("id")
+	if siteId == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "site ID is required"})
+	}
+
+	site, err := app.FindRecordById("sites", siteId)
+	if err != nil {
+		return e.JSON(http.StatusNotFound, map[string]string{"error": "site not found"})
+	}
+
+	logType := e.Request.URL.Query().Get("type")
+	if logType != "nginx_access" && logType != "nginx_error" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "only nginx_access and nginx_error logs can be cleared"})
+	}
+
+	if runtime.GOOS == "windows" {
+		return e.JSON(http.StatusOK, map[string]string{"message": "mock log cleared"})
+	}
+
+	var filePath string
+	if logType == "nginx_access" {
+		filePath = fmt.Sprintf("/var/log/nginx/%s-access.log", site.GetString("domain"))
+	} else {
+		filePath = fmt.Sprintf("/var/log/nginx/%s-error.log", site.GetString("domain"))
+	}
+
+	if err := os.WriteFile(filePath, []byte(""), 0644); err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to clear log: " + err.Error()})
+	}
+
+	return e.JSON(http.StatusOK, map[string]string{"message": "log cleared successfully"})
+}

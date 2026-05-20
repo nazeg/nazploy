@@ -29,8 +29,8 @@ export default function LoginPage({ onLogin }: Props) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-center mb-2">VPS Dashboard</h1>
-        <p className="text-sm text-gray-500 text-center mb-6">Pocketbase admin hesabınızla giriş yapın</p>
+        <h1 className="text-2xl font-bold text-center mb-2">Nazploy</h1>
+        <p className="text-sm text-gray-500 text-center mb-6">Admin hesabınızla giriş yapın</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
