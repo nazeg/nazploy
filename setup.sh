@@ -168,28 +168,6 @@ echo -e "🚀 ${BOLD}Kurulum Başlatılıyor...${NC}"
 run_step "Sistem paket listesi güncelleniyor (apt update)" apt-get update
 run_step "Temel sistem bağımlılıkları yükleniyor" apt-get install -y nginx certbot python3-certbot-nginx git curl unzip
 
-# Go Kurulumu (versiyon kontrolü ile)
-REQUIRED_GO=""
-if [ -f "go.mod" ]; then
-  REQUIRED_GO=$(grep -oP '^go \K[0-9]+\.[0-9]+(\.[0-9]+)?' go.mod | head -1)
-elif [ -f "/root/nazploy-src/go.mod" ]; then
-  REQUIRED_GO=$(grep -oP '^go \K[0-9]+\.[0-9]+(\.[0-9]+)?' /root/nazploy-src/go.mod | head -1)
-fi
-
-INSTALLED_GO=""
-if command -v go &> /dev/null; then
-  INSTALLED_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
-fi
-
-if [ -z "$INSTALLED_GO" ]; then
-  run_step "Go programlama dili kuruluyor (tar.gz)" install_go
-elif [ -n "$REQUIRED_GO" ] && [ "$(printf '%s\n' "$REQUIRED_GO" "$INSTALLED_GO" | sort -V | head -1)" != "$REQUIRED_GO" ]; then
-  echo -e "  ⚠️  ${YELLOW}Kurulu Go (v${INSTALLED_GO}) yetersiz, go.mod v${REQUIRED_GO}+ gerektiriyor. Güncelleniyor...${NC}"
-  run_step "Go programlama dili güncelleniyor (tar.gz)" install_go
-else
-  echo -e "  ✔️  ${GREEN}Go programlama dili zaten kurulu${NC} (v${INSTALLED_GO})"
-fi
-
 # Node.js Kurulumu
 if ! command -v node &> /dev/null; then
   NODE_MAJOR=$(get_latest_node_lts_major)
@@ -199,13 +177,30 @@ else
   echo -e "  ✔️  ${GREEN}Node.js zaten kurulu${NC} ($(node -v))"
 fi
 
-# 3. Projenin Klonlanması veya Güncellenmesi
+# 3. Projenin Klonlanması veya Güncellenmesi (Go kontrolünden ÖNCE)
 if [ ! -d "/root/nazploy-src" ]; then
   run_step "Proje deposu GitHub'dan klonlanıyor" git clone https://github.com/nazeg/nazploy.git /root/nazploy-src
-  cd /root/nazploy-src
 else
   cd /root/nazploy-src
   run_step "Proje güncelleniyor (git pull)" bash -c "git reset --hard && git pull"
+fi
+cd /root/nazploy-src
+
+# Go Kurulumu (go.mod'dan gereken versiyonu oku, karşılaştır)
+REQUIRED_GO=$(sed -n 's/^go \([0-9][0-9.]*\).*/\1/p' /root/nazploy-src/go.mod | head -1)
+
+INSTALLED_GO=""
+if command -v go &> /dev/null; then
+  INSTALLED_GO=$(go version | sed -n 's/.*go\([0-9][0-9.]*\).*/\1/p' | head -1)
+fi
+
+if [ -z "$INSTALLED_GO" ]; then
+  run_step "Go programlama dili kuruluyor (tar.gz)" install_go
+elif [ -n "$REQUIRED_GO" ] && [ "$(printf '%s\n' "$REQUIRED_GO" "$INSTALLED_GO" | sort -V | head -1)" != "$REQUIRED_GO" ]; then
+  echo -e "  ⚠️  ${YELLOW}Kurulu Go (v${INSTALLED_GO}) yetersiz, go.mod v${REQUIRED_GO}+ gerektiriyor. Güncelleniyor...${NC}"
+  run_step "Go programlama dili güncelleniyor (tar.gz)" install_go
+else
+  echo -e "  ✔️  ${GREEN}Go programlama dili zaten kurulu${NC} (v${INSTALLED_GO})"
 fi
 
 # 4. Klasör Yapısının Hazırlanması
