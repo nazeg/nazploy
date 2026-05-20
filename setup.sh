@@ -101,7 +101,7 @@ run_step() {
 }
 
 install_go() {
-  local GO_VERSION="1.22.3"
+  local GO_VERSION="1.25.0"
   rm -rf /usr/local/go
   curl -L -o /tmp/go.tar.gz "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz"
   tar -C /usr/local -xzf /tmp/go.tar.gz
@@ -161,8 +161,13 @@ run_step "Frontend bağımlılıkları temizlenip yükleniyor" bash -c "rm -rf n
 run_step "Frontend derleniyor (Vite build)" npm run build --unsafe-perm=true
 cd ..
 
-# 6. Backend Derleme (Build)
-GO_BIN=$(command -v go || echo "/snap/bin/go")
+# 6. Disk alanı temizliği (node_modules ve Go cache gereksiz dosyalar)
+run_step "Geçici dosyalar temizleniyor (disk alanı açılıyor)" bash -c "rm -rf /root/nazploy-src/web/node_modules && apt-get clean && rm -rf /var/lib/apt/lists/*"
+
+# 7. Backend Derleme (Build)
+export GOTOOLCHAIN=local
+export GOFLAGS="-trimpath"
+GO_BIN=$(command -v go || echo "/usr/local/go/bin/go")
 run_step "Backend Go uygulaması derleniyor" "$GO_BIN" build -o /root/nazploy/nazploy .
 
 # 8. Systemd Servisi Oluşturma
