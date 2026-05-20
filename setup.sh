@@ -168,11 +168,26 @@ echo -e "🚀 ${BOLD}Kurulum Başlatılıyor...${NC}"
 run_step "Sistem paket listesi güncelleniyor (apt update)" apt-get update
 run_step "Temel sistem bağımlılıkları yükleniyor" apt-get install -y nginx certbot python3-certbot-nginx git curl unzip
 
-# Go Kurulumu
-if ! command -v go &> /dev/null; then
+# Go Kurulumu (versiyon kontrolü ile)
+REQUIRED_GO=""
+if [ -f "go.mod" ]; then
+  REQUIRED_GO=$(grep -oP '^go \K[0-9]+\.[0-9]+(\.[0-9]+)?' go.mod | head -1)
+elif [ -f "/root/nazploy-src/go.mod" ]; then
+  REQUIRED_GO=$(grep -oP '^go \K[0-9]+\.[0-9]+(\.[0-9]+)?' /root/nazploy-src/go.mod | head -1)
+fi
+
+INSTALLED_GO=""
+if command -v go &> /dev/null; then
+  INSTALLED_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+fi
+
+if [ -z "$INSTALLED_GO" ]; then
   run_step "Go programlama dili kuruluyor (tar.gz)" install_go
+elif [ -n "$REQUIRED_GO" ] && [ "$(printf '%s\n' "$REQUIRED_GO" "$INSTALLED_GO" | sort -V | head -1)" != "$REQUIRED_GO" ]; then
+  echo -e "  ⚠️  ${YELLOW}Kurulu Go (v${INSTALLED_GO}) yetersiz, go.mod v${REQUIRED_GO}+ gerektiriyor. Güncelleniyor...${NC}"
+  run_step "Go programlama dili güncelleniyor (tar.gz)" install_go
 else
-  echo -e "  ✔️  ${GREEN}Go programlama dili zaten kurulu${NC} ($(go version | awk '{print $3}'))"
+  echo -e "  ✔️  ${GREEN}Go programlama dili zaten kurulu${NC} (v${INSTALLED_GO})"
 fi
 
 # Node.js Kurulumu
