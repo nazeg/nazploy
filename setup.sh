@@ -283,9 +283,11 @@ echo -e "🌐 Yönetim Paneli Adresi: ${CYAN}${BOLD}http://${LOCAL_IP}:8090${NC}
 echo -e "${GREEN}${BOLD}========================================================${NC}"
 echo ""
 
-# İlk kurulum linkini journalctl'den yakala ve göster
-SETUP_LINK=$(journalctl -u nazploy -n 30 --no-pager 2>/dev/null | grep -oP 'http://[^\s]+' | head -1)
+# İlk kurulum linkini journalctl'den yakala ve göster (içinde pbinstall veya setup geçen link)
+SETUP_LINK=$(journalctl -u nazploy -n 40 --no-pager 2>/dev/null | grep -oE 'http://[^\s]*(pbinstall|setup)[^\s]*' | head -1)
 if [ -n "$SETUP_LINK" ]; then
+  # 0.0.0.0 adresini gerçek sunucu IP'si ile değiştir
+  SETUP_LINK=${SETUP_LINK//0.0.0.0/$LOCAL_IP}
   echo -e "🔑 ${YELLOW}${BOLD}İLK KURULUM:${NC} Admin hesabı oluşturmak için aşağıdaki linki tarayıcınızda açın:"
   echo -e "   ${CYAN}${BOLD}${SETUP_LINK}${NC}"
   echo ""
