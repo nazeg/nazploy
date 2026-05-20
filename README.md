@@ -1,4 +1,4 @@
-# VPS Dashboard
+# Nazploy (VPS Dashboard)
 
 Web sitelerini yönetmek için **Pocketbase tabanlı** bir dashboard. Nginx konfigürasyonlarını otomatik oluşturur, Let's Encrypt SSL yönetimi yapar, ve her site için ayrı Pocketbase veritabanı oluşturmanıza olanak tanır.
 
@@ -6,7 +6,7 @@ Web sitelerini yönetmek için **Pocketbase tabanlı** bir dashboard. Nginx konf
 
 ```
 ┌─────────────────────────────────────────┐
-│         VPS Dashboard (Go Binary)       │
+│             Nazploy (Go Binary)         │
 │  ┌─────────────────────────────────┐    │
 │  │  Pocketbase (Embedded)          │    │
 │  │  - Admin UI: /_/                │    │
@@ -55,62 +55,35 @@ Web sitelerini yönetmek için **Pocketbase tabanlı** bir dashboard. Nginx konf
 - **Nginx** (VPS'te)
 - **Certbot** (SSL için)
 
-## Hızlı Kurulum
+## Kurulum
 
-### 1. VPS'te gerekli paketleri kurun
+### Otomatik Kurulum (Önerilen)
 
-```bash
-sudo apt update
-sudo apt install -y nginx certbot python3-certbot-nginx golang-go nodejs npm
-```
-
-### 2. Projeyi klonlayın ve derleyin
+Tek bir komutla tüm bağımlılıkları (`go`, `nodejs`, `nginx`, `certbot` vb.) kurabilir, projeyi derleyebilir ve arka planda çalışan bir `systemd` servisi olarak başlatabilirsiniz:
 
 ```bash
-git clone <repo-url> /opt/dashboard
-cd /opt/dashboard
-
-# Frontend build
-cd web && npm install && npm run build && cd ..
-
-# Go backend derle
-CGO_ENABLED=0 go build -ldflags="-s -w" -trimpath -o build/dashboard .
+curl -sSL https://raw.githubusercontent.com/nazeg/nazploy/main/setup.sh | sudo bash
 ```
 
-### 3. Çalıştırın
+*Not: Bu betik projeyi otomatik olarak `/root/nazploy-src` dizinine klonlar, gerekli derleme işlemlerini yapar ve uygulamayı `/root/nazploy/` konumunda bir systemd servisi (`nazploy.service`) olarak kurup başlatır.*
+
+### Manuel Kurulum / Güncelleme
+
+Eğer depoyu zaten klonladıysanız veya yerel kopyadan kurmak istiyorsanız:
 
 ```bash
-sudo ./build/dashboard --dir=/var/lib/dashboard --http=0.0.0.0:8090
+git clone https://github.com/nazeg/nazploy.git
+cd nazploy
+sudo chmod +x setup.sh
+sudo ./setup.sh
 ```
 
-### 4. systemd servisi oluşturun
+### Tarayıcıdan Erişim
 
-```ini
-# /etc/systemd/system/dashboard.service
-[Unit]
-Description=VPS Dashboard
-After=network.target nginx.service
+Kurulum tamamlandıktan sonra tarayıcınızdan aşağıdaki adreslere erişebilirsiniz:
 
-[Service]
-Type=simple
-User=root
-ExecStart=/opt/dashboard/build/dashboard --dir=/var/lib/dashboard --http=0.0.0.0:8090
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now dashboard
-```
-
-### 5. Tarayıcıdan erişin
-
-Dashboard: `http://SUNUCU_IP:8090`  
-Pocketbase Admin: `http://SUNUCU_IP:8090/_/`
+- **Dashboard:** `http://SUNUCU_IP:8090`
+- **Pocketbase Admin:** `http://SUNUCU_IP:8090/_/`
 
 İlk açılışta bir admin hesabı oluşturun. Bu hesapla dashboard'a giriş yapabilirsiniz.
 
@@ -141,7 +114,7 @@ Pocketbase Admin: `http://SUNUCU_IP:8090/_/`
 ## Proje Yapısı
 
 ```
-dashboard/
+nazploy/
 ├── main.go                          # Giriş noktası
 ├── go.mod                           # Go modül
 ├── Makefile                         # Build komutları
