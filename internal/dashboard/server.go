@@ -61,6 +61,7 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	}
 
 	record := core.NewRecord(collection)
+	record.Id = generateRandomID()
 	record.Set("name", req.Name)
 	record.Set("domain", req.Domain)
 	record.Set("port", port)
@@ -710,4 +711,18 @@ func sanitizeSlug(s string) string {
 		return "site"
 	}
 	return s
+}
+
+func generateRandomID() string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 15)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			b[i] = charset[i%len(charset)]
+			continue
+		}
+		b[i] = charset[n.Int64()]
+	}
+	return string(b)
 }
