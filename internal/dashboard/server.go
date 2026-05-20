@@ -372,6 +372,14 @@ func HandleEnableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 
 	domain := record.GetString("domain")
 
+	// Ensure Nginx log directory exists
+	os.MkdirAll("/var/log/nginx", 0755)
+	sslLogPath := filepath.Join("/var/log/nginx", fmt.Sprintf("%s-ssl.log", domain))
+
+	// Write initial status to log
+	initialMsg := fmt.Sprintf("[%s] Let's Encrypt SSL sertifikası talep ediliyor...\n", time.Now().Format("2006-01-02 15:04:05"))
+	os.WriteFile(sslLogPath, []byte(initialMsg), 0644)
+
 	// Update status to pending
 	record.Set("ssl_status", SSLStatusPending)
 	app.Save(record)
@@ -382,12 +390,20 @@ func HandleEnableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 		if err != nil {
 			record.Set("ssl_status", SSLStatusError)
 			app.Save(record)
+
+			// Hata detayını log dosyasına yaz
+			errMsg := fmt.Sprintf("[%s] SSL Kurulumu Başarısız Oldu:\n%v\n", time.Now().Format("2006-01-02 15:04:05"), err)
+			os.WriteFile(sslLogPath, []byte(errMsg), 0644)
 			return
 		}
 
 		record.Set("ssl_status", SSLStatusActive)
 		record.Set("ssl_expiry", result.Expiry)
 		app.Save(record)
+
+		// Başarı mesajını log dosyasına yaz
+		successMsg := fmt.Sprintf("[%s] SSL Sertifikası Başarıyla Kuruldu!\nSertifika Yolu: %s\nGeçerlilik: %s\n", time.Now().Format("2006-01-02 15:04:05"), result.CertPath, result.Expiry)
+		os.WriteFile(sslLogPath, []byte(successMsg), 0644)
 
 		// Regenerate Nginx config with SSL
 		config, err := ngx.GenerateConfig(NginxConfigInput{

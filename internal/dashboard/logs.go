@@ -28,7 +28,7 @@ func HandleGetSiteLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error {
 		logType = "nginx_access"
 	}
 
-	if logType != "nginx_access" && logType != "nginx_error" && logType != "service" {
+	if logType != "nginx_access" && logType != "nginx_error" && logType != "service" && logType != "ssl" {
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid log type"})
 	}
 
@@ -44,6 +44,9 @@ func HandleGetSiteLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error {
 		logs, err = readLastLines(filePath, 100)
 	case "nginx_error":
 		filePath := fmt.Sprintf("/var/log/nginx/%s-error.log", site.GetString("domain"))
+		logs, err = readLastLines(filePath, 100)
+	case "ssl":
+		filePath := fmt.Sprintf("/var/log/nginx/%s-ssl.log", site.GetString("domain"))
 		logs, err = readLastLines(filePath, 100)
 	case "service":
 		if site.GetString("site_type") != SiteTypePocketbase {
@@ -95,8 +98,8 @@ func HandleClearSiteLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error
 	}
 
 	logType := e.Request.URL.Query().Get("type")
-	if logType != "nginx_access" && logType != "nginx_error" {
-		return e.JSON(http.StatusBadRequest, map[string]string{"error": "only nginx_access and nginx_error logs can be cleared"})
+	if logType != "nginx_access" && logType != "nginx_error" && logType != "ssl" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "only nginx_access, nginx_error, and ssl logs can be cleared"})
 	}
 
 	if runtime.GOOS == "windows" {
@@ -106,8 +109,10 @@ func HandleClearSiteLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error
 	var filePath string
 	if logType == "nginx_access" {
 		filePath = fmt.Sprintf("/var/log/nginx/%s-access.log", site.GetString("domain"))
-	} else {
+	} else if logType == "nginx_error" {
 		filePath = fmt.Sprintf("/var/log/nginx/%s-error.log", site.GetString("domain"))
+	} else {
+		filePath = fmt.Sprintf("/var/log/nginx/%s-ssl.log", site.GetString("domain"))
 	}
 
 	if err := os.WriteFile(filePath, []byte(""), 0644); err != nil {

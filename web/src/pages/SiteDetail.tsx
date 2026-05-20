@@ -19,7 +19,7 @@ export default function SiteDetail() {
   const [dbLoading, setDbLoading] = useState(false)
 
   // Logs state
-  const [logType, setLogType] = useState<'nginx_access' | 'nginx_error' | 'service'>('nginx_access')
+  const [logType, setLogType] = useState<'nginx_access' | 'nginx_error' | 'service' | 'ssl'>('nginx_access')
   const [logs, setLogs] = useState('')
   const [logsLoading, setLogsLoading] = useState(false)
   const [liveLogs, setLiveLogs] = useState(false)
@@ -419,10 +419,10 @@ export default function SiteDetail() {
               </div>
             </div>
 
-            <div className="flex border-b border-gray-200 mb-4">
+            <div className="flex border-b border-gray-200 mb-4 overflow-x-auto">
               <button
                 onClick={() => setLogType('nginx_access')}
-                className={`py-2 px-4 border-b-2 text-sm font-medium transition-colors ${
+                className={`py-2 px-4 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
                   logType === 'nginx_access'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -432,7 +432,7 @@ export default function SiteDetail() {
               </button>
               <button
                 onClick={() => setLogType('nginx_error')}
-                className={`py-2 px-4 border-b-2 text-sm font-medium transition-colors ${
+                className={`py-2 px-4 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
                   logType === 'nginx_error'
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -440,10 +440,20 @@ export default function SiteDetail() {
               >
                 Nginx Error
               </button>
+              <button
+                onClick={() => setLogType('ssl')}
+                className={`py-2 px-4 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
+                  logType === 'ssl'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                SSL (Let's Encrypt) Logları
+              </button>
               {site.site_type === 'pocketbase' && (
                 <button
                   onClick={() => setLogType('service')}
-                  className={`py-2 px-4 border-b-2 text-sm font-medium transition-colors ${
+                  className={`py-2 px-4 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
                     logType === 'service'
                       ? 'border-blue-500 text-blue-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
