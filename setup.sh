@@ -94,4 +94,5 @@ echo "=== KURULUM TAMAMLANDI ==="
 echo "VPS Dashboard başarıyla kuruldu ve başlatıldı!"
 echo "Yönetim Paneli Adresi: http://$(curl -s https://ipinfo.io/ip):8090"
 echo "--------------------------------------------------------"
-systemctl status dashboard --no-pager
+# journalctl satırları kırpmaz, böylece kurulum linki tam haliyle ekranda görünür
+journalctl -u dashboard -n 15 --no-pager
