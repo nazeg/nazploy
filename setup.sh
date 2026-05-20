@@ -150,7 +150,7 @@ install_go() {
   ln -sf /usr/local/go/bin/gofmt /usr/bin/gofmt
 }
 
-# --- AKIŞ BAŞLANGICI ---
+# -- AKIŞ BAŞLANGICI --
 clear
 print_banner
 print_system_diagnostics
