@@ -272,28 +272,30 @@ run_step "Servisler etkinleştiriliyor ve başlatılıyor" bash -c "systemctl da
 # 10. Bitiş Ekranı
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "SUNUCU_IP")
 
-# PocketBase'in başlatılması ve ilk setup linkinin üretilmesi için kısa bekleme
-sleep 3
+# Setup linkini bekle
+SETUP_LINK=""
+for i in $(seq 1 15); do
+  sleep 1
+  SETUP_LINK=$(journalctl -u nazploy --since "1 minute ago" --no-pager --full 2>/dev/null \
+    | grep -oE 'http://[^[:space:]]*(pbinstall|setup)[^[:space:]]*' \
+    | tail -1)
+  [ -n "$SETUP_LINK" ] && break
+done
 
 echo ""
 echo -e "${GREEN}${BOLD}========================================================${NC}"
 echo -e "🎉 ${GREEN}${BOLD}KURULUM BAŞARIYLA TAMAMLANDI!${NC}"
-echo -e "🚀 Nazploy başarıyla kuruldu ve arka planda başlatıldı."
-echo -e "🌐 Yönetim Paneli Adresi: ${CYAN}${BOLD}http://${LOCAL_IP}:8090${NC}"
+echo -e "🌐 Yönetim Paneli: ${CYAN}${BOLD}http://${LOCAL_IP}:8090${NC}"
 echo -e "${GREEN}${BOLD}========================================================${NC}"
 echo ""
 
-# İlk kurulum linkini journalctl'den yakala ve göster (içinde pbinstall veya setup geçen en son link)
-SETUP_LINK=$(journalctl -u nazploy -n 50 --no-pager --full 2>/dev/null | grep -oE 'http://[^\s]*(pbinstall|setup)[^\s]*' | tail -1)
 if [ -n "$SETUP_LINK" ]; then
-  # 0.0.0.0 adresini gerçek sunucu IP'si ile değiştir
   SETUP_LINK=${SETUP_LINK//0.0.0.0/$LOCAL_IP}
-  echo -e "🔑 ${YELLOW}${BOLD}İLK KURULUM:${NC} Admin hesabı oluşturmak için aşağıdaki linki tarayıcınızda açın:"
+  echo -e "🔑 ${YELLOW}${BOLD}İLK KURULUM:${NC} Admin hesabı oluşturmak için bu linki tarayıcında aç:"
   echo -e "   ${CYAN}${BOLD}${SETUP_LINK}${NC}"
-  echo ""
+else
+  echo -e "⚠️  ${YELLOW}Setup linki alınamadı. Manuel kontrol:${NC}"
+  echo -e "   journalctl -u nazploy -n 30 --no-pager"
 fi
-
-echo -e "${YELLOW}${BOLD}Servis Durumu (journalctl):${NC}"
-journalctl -u nazploy -n 15 --no-pager | sed 's/^/  /'
 echo ""
 
