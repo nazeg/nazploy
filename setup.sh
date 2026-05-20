@@ -76,6 +76,9 @@ echo "-> Temizlik yapılıyor..."
 
 # 8. Systemd Servisi Oluşturma
 echo "-> Arka plan servisi oluşturuluyor..."
+DEPLOY_USER=${SUDO_USER:-root}
+echo "-> Tespit edilen deploy kullanıcısı: $DEPLOY_USER"
+
 cat <<EOF > /etc/systemd/system/dashboard.service
 [Unit]
 Description=VPS Dashboard Manager
@@ -87,6 +90,7 @@ User=root
 WorkingDirectory=/root/dashboard
 ExecStart=/root/dashboard/dashboard serve --http=0.0.0.0:8090
 Restart=always
+Environment=DEPLOY_USER=$DEPLOY_USER
 
 [Install]
 WantedBy=multi-user.target

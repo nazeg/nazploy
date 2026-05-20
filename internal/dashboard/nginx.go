@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"text/template"
 )
 
@@ -340,8 +343,27 @@ func (m *NginxManager) CreateWebRoot(domain string) (string, error) {
 </body>
 </html>`, domain, domain, rootDir)
 
-	if err := os.WriteFile(filepath.Join(rootDir, "index.html"), []byte(indexHTML), 0644); err != nil {
+	indexHTMLPath := filepath.Join(rootDir, "index.html")
+	if err := os.WriteFile(indexHTMLPath, []byte(indexHTML), 0644); err != nil {
 		return rootDir, fmt.Errorf("create index.html: %w", err)
+	}
+
+	// Automatically transfer ownership to DEPLOY_USER (if configured and running on Linux)
+	deployUser := os.Getenv("DEPLOY_USER")
+	if deployUser != "" && deployUser != "root" && runtime.GOOS != "windows" {
+		u, err := user.Lookup(deployUser)
+		if err == nil {
+			uid, _ := strconv.Atoi(u.Uid)
+			gid := -1
+			g, errGroup := user.LookupGroup("www-data")
+			if errGroup == nil {
+				gid, _ = strconv.Atoi(g.Gid)
+			} else {
+				gid, _ = strconv.Atoi(u.Gid)
+			}
+			os.Chown(rootDir, uid, gid)
+			os.Chown(indexHTMLPath, uid, gid)
+		}
 	}
 
 	return rootDir, nil
