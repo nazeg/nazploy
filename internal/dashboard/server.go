@@ -210,27 +210,51 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		ngx.RemoveConfig(oldDomain)
 	}
 
-	// Regenerate Nginx config
 	domain := record.GetString("domain")
-	config, err := ngx.GenerateConfig(NginxConfigInput{
-		Domain:   domain,
-		Port:     record.GetInt("port"),
-		RootDir:  record.GetString("root_dir"),
-		SiteType: record.GetString("site_type"),
-		ProxyURL: record.GetString("proxy_url"),
-	})
-	if err != nil {
-		return e.JSON(http.StatusOK, map[string]interface{}{
-			"record":  record,
-			"warning": "nginx config gen failed: " + err.Error(),
-		})
-	}
+	status := record.GetString("status")
 
-	if err := ngx.WriteConfig(domain, config); err != nil {
-		return e.JSON(http.StatusOK, map[string]interface{}{
-			"record":  record,
-			"warning": "nginx config write failed: " + err.Error(),
+	if status == SiteStatusPaused {
+		// Pasif: Nginx symlink'ini kaldır ve pocketbase servisini durdur
+		enabledPath := filepath.Join(NginxSitesEnabled, domain)
+		os.Remove(enabledPath)
+		if record.GetString("site_type") == SiteTypePocketbase {
+			runCommand("systemctl", "stop", "pocketbase-"+record.Id)
+		}
+	} else {
+		// Aktif: Pocketbase servisini başlat (gerekliyse) ve Nginx konfigürasyonunu yaz
+		if record.GetString("site_type") == SiteTypePocketbase {
+			runCommand("systemctl", "start", "pocketbase-"+record.Id)
+		}
+
+		var sslEntry *SSLEntry
+		if record.GetString("ssl_status") == SSLStatusActive {
+			sslEntry = &SSLEntry{
+				CertPath: filepath.Join("/etc/letsencrypt/live", domain, "fullchain.pem"),
+				KeyPath:  filepath.Join("/etc/letsencrypt/live", domain, "privkey.pem"),
+			}
+		}
+
+		config, err := ngx.GenerateConfig(NginxConfigInput{
+			Domain:   domain,
+			Port:     record.GetInt("port"),
+			RootDir:  record.GetString("root_dir"),
+			SiteType: record.GetString("site_type"),
+			ProxyURL: record.GetString("proxy_url"),
+			SSLEntry: sslEntry,
 		})
+		if err != nil {
+			return e.JSON(http.StatusOK, map[string]interface{}{
+				"record":  record,
+				"warning": "nginx config gen failed: " + err.Error(),
+			})
+		}
+
+		if err := ngx.WriteConfig(domain, config); err != nil {
+			return e.JSON(http.StatusOK, map[string]interface{}{
+				"record":  record,
+				"warning": "nginx config write failed: " + err.Error(),
+			})
+		}
 	}
 
 	ngx.Reload() // best effort
@@ -298,6 +322,10 @@ func HandleDeploySite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	record, err := app.FindRecordById("sites", e.Request.PathValue("id"))
 	if err != nil {
 		return e.JSON(http.StatusNotFound, map[string]string{"error": "site not found"})
+	}
+
+	if record.GetString("status") == SiteStatusPaused {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Pasif durumdaki siteler yayınlanamaz. Lütfen önce siteyi aktif hale getirin."})
 	}
 
 	domain := record.GetString("domain")

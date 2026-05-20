@@ -42,6 +42,19 @@ export default function SitesList() {
     paused: 'bg-yellow-100 text-yellow-700',
   }
 
+  async function toggleStatus(site: Site) {
+    const newStatus = site.status === 'active' ? 'paused' : 'active'
+    try {
+      const updated = await pb.send<Site>(`/api/dashboard/sites/${site.id}`, {
+        method: 'PATCH',
+        body: { status: newStatus },
+      })
+      setSites((prev) => prev.map((s) => (s.id === site.id ? { ...s, status: updated.status } : s)))
+    } catch (err: any) {
+      alert('Hata: Durum değiştirilemedi. ' + (err?.message || ''))
+    }
+  }
+
   const sslColors = {
     none: 'bg-gray-100 text-gray-600',
     pending: 'bg-yellow-100 text-yellow-700',
@@ -120,12 +133,24 @@ export default function SitesList() {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <button
-                      onClick={() => deleteSite(site)}
-                      className="text-red-500 hover:text-red-700 text-sm"
-                    >
-                      Sil
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => toggleStatus(site)}
+                        className={`text-xs font-semibold px-2 py-1 rounded transition-colors ${
+                          site.status === 'active'
+                            ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                            : 'bg-green-50 text-green-700 hover:bg-green-100'
+                        }`}
+                      >
+                        {site.status === 'active' ? 'Durdur' : 'Başlat'}
+                      </button>
+                      <button
+                        onClick={() => deleteSite(site)}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        Sil
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

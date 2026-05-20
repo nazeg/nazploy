@@ -126,6 +126,20 @@ export default function SiteDetail() {
     }
   }
 
+  async function toggleStatus() {
+    if (!site) return
+    const newStatus = site.status === 'active' ? 'paused' : 'active'
+    try {
+      const updated = await pb.send<Site>(`/api/dashboard/sites/${id}`, {
+        method: 'PATCH',
+        body: { status: newStatus },
+      })
+      setSite(updated)
+    } catch (err: any) {
+      alert('Durum güncellenirken hata oluştu: ' + (err?.message || ''))
+    }
+  }
+
   async function handleCreateDb(e: React.FormEvent) {
     e.preventDefault()
     setDbLoading(true)
@@ -459,8 +473,19 @@ export default function SiteDetail() {
             <h3 className="font-semibold mb-3">Aksiyonlar</h3>
             <div className="space-y-2">
               <button
+                onClick={toggleStatus}
+                className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  site.status === 'active'
+                    ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                {site.status === 'active' ? 'Siteyi Durdur (Pasif Yap)' : 'Siteyi Başlat (Aktif Yap)'}
+              </button>
+              <button
                 onClick={deploy}
-                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                disabled={site.status === 'paused'}
+                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Deploy Et (Nginx Reload)
               </button>
@@ -469,7 +494,9 @@ export default function SiteDetail() {
                   href={`http://${site.domain}:${site.port}/_/`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full text-center bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                  className={`block w-full text-center bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors ${
+                    site.status === 'paused' ? 'pointer-events-none opacity-50' : ''
+                  }`}
                 >
                   PocketBase Admin Panel
                 </a>
@@ -478,7 +505,9 @@ export default function SiteDetail() {
                 href={`http://${site.domain}:${site.port}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block w-full text-center border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className={`block w-full text-center border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors ${
+                  site.status === 'paused' ? 'pointer-events-none opacity-50' : ''
+                }`}
               >
                 Siteyi Aç
               </a>
