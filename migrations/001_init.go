@@ -18,6 +18,8 @@ func init() {
 		sitesCollection.DeleteRule = types.Pointer("@request.auth.id != ''")
 
 		sitesCollection.Fields.Add(
+			&core.AutodateField{Name: "created"},
+			&core.AutodateField{Name: "updated"},
 			&core.TextField{Name: "name", Required: true},
 			&core.TextField{Name: "domain", Required: true},
 			&core.NumberField{Name: "port", Required: true},
@@ -48,6 +50,8 @@ func init() {
 		databasesCollection.DeleteRule = types.Pointer("@request.auth.id != ''")
 
 		databasesCollection.Fields.Add(
+			&core.AutodateField{Name: "created"},
+			&core.AutodateField{Name: "updated"},
 			&core.RelationField{
 				Name:          "site_id",
 				Required:      true,
