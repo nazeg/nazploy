@@ -1,0 +1,20 @@
+# Binaries
+bin/
+dashboard
+dashboard-vps
+vps-dashboard-bin
+
+# Pocketbase local data
+pb_data/
+databases/
+
+# Node modules
+web/node_modules/
+node_modules/
+
+# Build outputs
+web/dist/
+
+# OS specific files
+.DS_Store
+Thumbs.db
