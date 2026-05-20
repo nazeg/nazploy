@@ -9,6 +9,8 @@ export default function DashboardOverview() {
 
   useEffect(() => {
     loadStats()
+    const interval = setInterval(loadStats, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   async function loadStats() {
@@ -88,9 +90,78 @@ export default function DashboardOverview() {
         ))}
       </div>
 
+      {/* Sistem Durumu / Kaynak Kullanımı */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* CPU */}
+        <div className="bg-white rounded-xl shadow-sm p-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-semibold text-gray-700">İşlemci (CPU)</span>
+            <span className={`text-sm font-bold ${
+              (stats?.metrics?.cpu_percent ?? 0) > 90 ? 'text-red-600' : (stats?.metrics?.cpu_percent ?? 0) > 70 ? 'text-yellow-600' : 'text-green-600'
+            }`}>
+              {stats?.metrics?.cpu_percent?.toFixed(1) ?? '0.0'}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${
+                (stats?.metrics?.cpu_percent ?? 0) > 90 ? 'bg-red-500' : (stats?.metrics?.cpu_percent ?? 0) > 70 ? 'bg-yellow-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${Math.min(100, stats?.metrics?.cpu_percent ?? 0)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Memory */}
+        <div className="bg-white rounded-xl shadow-sm p-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-semibold text-gray-700">Bellek (RAM)</span>
+            <span className={`text-sm font-bold ${
+              (stats?.metrics?.ram_percent ?? 0) > 90 ? 'text-red-600' : (stats?.metrics?.ram_percent ?? 0) > 70 ? 'text-yellow-600' : 'text-green-600'
+            }`}>
+              {stats?.metrics?.ram_percent?.toFixed(1) ?? '0.0'}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${
+                (stats?.metrics?.ram_percent ?? 0) > 90 ? 'bg-red-500' : (stats?.metrics?.ram_percent ?? 0) > 70 ? 'bg-yellow-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${Math.min(100, stats?.metrics?.ram_percent ?? 0)}%` }}
+            />
+          </div>
+          <span className="text-xs text-gray-500">
+            {stats?.metrics?.ram_used_mb ? (stats.metrics.ram_used_mb / 1024).toFixed(2) : '0.00'} GB / {stats?.metrics?.ram_total_mb ? (stats.metrics.ram_total_mb / 1024).toFixed(2) : '0.00'} GB Kullanılıyor
+          </span>
+        </div>
+
+        {/* Disk */}
+        <div className="bg-white rounded-xl shadow-sm p-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-semibold text-gray-700">Disk Depolama</span>
+            <span className={`text-sm font-bold ${
+              (stats?.metrics?.disk_percent ?? 0) > 90 ? 'text-red-600' : (stats?.metrics?.disk_percent ?? 0) > 70 ? 'text-yellow-600' : 'text-green-600'
+            }`}>
+              {stats?.metrics?.disk_percent?.toFixed(1) ?? '0.0'}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${
+                (stats?.metrics?.disk_percent ?? 0) > 90 ? 'bg-red-500' : (stats?.metrics?.disk_percent ?? 0) > 70 ? 'bg-yellow-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${Math.min(100, stats?.metrics?.disk_percent ?? 0)}%` }}
+            />
+          </div>
+          <span className="text-xs text-gray-500">
+            {stats?.metrics?.disk_used_gb?.toFixed(2) ?? '0.00'} GB / {stats?.metrics?.disk_total_gb?.toFixed(2) ?? '0.00'} GB Kullanılıyor
+          </span>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold">Nginx Durumu</h2>
+          <h2 className="font-semibold text-gray-700">Nginx Durumu</h2>
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
             stats?.nginx_running ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
           }`}>

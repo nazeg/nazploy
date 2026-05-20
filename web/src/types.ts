@@ -29,12 +29,23 @@ export interface Database {
   updated: string
 }
 
+export interface SystemMetrics {
+  cpu_percent: number
+  ram_total_mb: number
+  ram_used_mb: number
+  ram_percent: number
+  disk_total_gb: number
+  disk_used_gb: number
+  disk_percent: number
+}
+
 export interface Stats {
   total_sites: number
   active_sites: number
   ssl_active_count: number
   total_databases: number
   nginx_running: boolean
+  metrics: SystemMetrics
 }
 
 export interface CreateSiteRequest {

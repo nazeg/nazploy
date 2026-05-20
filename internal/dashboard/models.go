@@ -95,11 +95,12 @@ type CreateDatabaseRequest struct {
 }
 
 type StatsResponse struct {
-	TotalSites     int `json:"total_sites"`
-	ActiveSites    int `json:"active_sites"`
-	SSLActiveCount int `json:"ssl_active_count"`
-	TotalDatabases int `json:"total_databases"`
-	NGINXRunning   bool `json:"nginx_running"`
+	TotalSites     int           `json:"total_sites"`
+	ActiveSites    int           `json:"active_sites"`
+	SSLActiveCount int           `json:"ssl_active_count"`
+	TotalDatabases int           `json:"total_databases"`
+	NGINXRunning   bool          `json:"nginx_running"`
+	Metrics        SystemMetrics `json:"metrics"`
 }
 
 type NginxConfigInput struct {

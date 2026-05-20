@@ -582,6 +582,7 @@ func HandleStats(e *core.RequestEvent, app *pocketbase.PocketBase) error {
 		SSLActiveCount: sslCount,
 		TotalDatabases: len(databases),
 		NGINXRunning:   ngx.IsRunning(),
+		Metrics:        GetSystemMetrics(),
 	}
 
 	return e.JSON(http.StatusOK, stats)

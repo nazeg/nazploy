@@ -18,6 +18,44 @@ export default function SiteDetail() {
   const [dbEmail, setDbEmail] = useState('')
   const [dbLoading, setDbLoading] = useState(false)
 
+  // Logs state
+  const [logType, setLogType] = useState<'nginx_access' | 'nginx_error' | 'service'>('nginx_access')
+  const [logs, setLogs] = useState('')
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [liveLogs, setLiveLogs] = useState(false)
+
+  async function loadLogs() {
+    if (!id) return
+    setLogsLoading(true)
+    try {
+      const res = await pb.send(`/api/dashboard/sites/${id}/logs?type=${logType}`, {
+        method: 'GET',
+      })
+      setLogs(res.logs)
+    } catch {
+      setLogs('Loglar yüklenemedi.')
+    } finally {
+      setLogsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadLogs()
+  }, [id, logType])
+
+  useEffect(() => {
+    if (!liveLogs) return
+    const interval = setInterval(loadLogs, 3000)
+    return () => clearInterval(interval)
+  }, [id, logType, liveLogs])
+
+  useEffect(() => {
+    const el = document.getElementById('log-viewer-box')
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [logs])
+
   useEffect(() => {
     loadSite()
     loadDatabases()
@@ -322,6 +360,77 @@ export default function SiteDetail() {
               )}
             </div>
           )}
+
+          {/* Log İzleyici Card */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-700">Log İzleyici</h2>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={liveLogs}
+                    onChange={(e) => setLiveLogs(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Canlı Akış
+                </label>
+                <button
+                  onClick={loadLogs}
+                  disabled={logsLoading}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  Yenile
+                </button>
+              </div>
+            </div>
+
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                onClick={() => setLogType('nginx_access')}
+                className={`py-2 px-4 border-b-2 text-sm font-medium transition-colors ${
+                  logType === 'nginx_access'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Nginx Access
+              </button>
+              <button
+                onClick={() => setLogType('nginx_error')}
+                className={`py-2 px-4 border-b-2 text-sm font-medium transition-colors ${
+                  logType === 'nginx_error'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Nginx Error
+              </button>
+              {site.site_type === 'pocketbase' && (
+                <button
+                  onClick={() => setLogType('service')}
+                  className={`py-2 px-4 border-b-2 text-sm font-medium transition-colors ${
+                    logType === 'service'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Servis Logları
+                </button>
+              )}
+            </div>
+
+            <div
+              id="log-viewer-box"
+              className="bg-gray-950 text-gray-200 rounded-lg p-4 font-mono text-xs overflow-y-auto h-80 whitespace-pre-wrap leading-relaxed shadow-inner border border-gray-800"
+            >
+              {logsLoading && logs === '' ? (
+                <p className="text-gray-500 animate-pulse">Yükleniyor...</p>
+              ) : (
+                logs
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Sidebar Actions */}

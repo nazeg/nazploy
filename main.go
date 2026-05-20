@@ -71,6 +71,11 @@ func main() {
 			return dashboard.HandleSSLStatus(e, app, ssl)
 		})
 
+		// Site logs
+		g.GET("/sites/{id}/logs", func(e *core.RequestEvent) error {
+			return dashboard.HandleGetSiteLogs(e, app)
+		})
+
 		// Databases (per-site Pocketbase instances)
 		g.POST("/sites/{id}/databases", func(e *core.RequestEvent) error {
 			return dashboard.HandleCreateDatabase(e, app, pm)
