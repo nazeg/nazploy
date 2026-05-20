@@ -10,6 +10,7 @@ export default function SiteForm() {
 
   const [name, setName] = useState('')
   const [domain, setDomain] = useState('')
+  const [port, setPort] = useState<number | ''>('')
   const [siteType, setSiteType] = useState<'static' | 'proxy' | 'pocketbase'>('static')
   const [proxyUrl, setProxyUrl] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
@@ -28,6 +29,7 @@ export default function SiteForm() {
       const site = await pb.collection('sites').getOne<Site>(id!)
       setName(site.name)
       setDomain(site.domain)
+      setPort(site.port)
       setSiteType(site.site_type)
       setProxyUrl(site.proxy_url || '')
       setAdminEmail(site.admin_email || '')
@@ -43,26 +45,26 @@ export default function SiteForm() {
     setLoading(true)
 
     try {
+      const body: any = {
+        name,
+        domain,
+        port: port ? Number(port) : undefined,
+        site_type: siteType,
+        proxy_url: siteType === 'proxy' ? proxyUrl : '',
+        notes,
+      }
+
       if (isEdit) {
         await pb.send(`/api/dashboard/sites/${id}`, {
           method: 'PATCH',
-          body: {
-            name,
-            site_type: siteType,
-            proxy_url: siteType === 'proxy' ? proxyUrl : '',
-            notes,
-          },
+          body,
         })
       } else {
         await pb.send('/api/dashboard/sites', {
           method: 'POST',
           body: {
-            name,
-            domain,
-            site_type: siteType,
-            proxy_url: siteType === 'proxy' ? proxyUrl : '',
+            ...body,
             admin_email: siteType === 'pocketbase' ? adminEmail : '',
-            notes,
           },
         })
       }
@@ -94,24 +96,36 @@ export default function SiteForm() {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="ör. Blog, E-Ticaret, Portföy"
             required
-            disabled={isEdit}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Domain</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Domain / IP</label>
           <input
             type="text"
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="ör. example.com"
+            placeholder="ör. example.com veya 10.2.42.87"
             required
-            disabled={isEdit}
           />
-          {!isEdit && (
-            <p className="text-xs text-gray-400 mt-1">Sitenize ait domain adresi (DNS zaten yönlendirilmiş olmalı)</p>
-          )}
+          <p className="text-xs text-gray-400 mt-1">
+            Sitenize ait domain adresi veya IP. (Not: IP adresleri için Let's Encrypt SSL desteklenmemektedir).
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+          <input
+            type="number"
+            value={port}
+            onChange={(e) => setPort(e.target.value === '' ? '' : Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={isEdit ? "ör. 10000" : "Boş bırakılırsa otomatik atanacaktır"}
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Nginx / Backend dinleme portu. Boş bırakırsanız sistem otomatik boş bir port (10000-20000 arası) atar.
+          </p>
         </div>
 
         <div>

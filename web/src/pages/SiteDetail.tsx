@@ -47,6 +47,14 @@ export default function SiteDetail() {
 
   async function toggleSSL() {
     if (!site) return
+
+    // Check if domain is an IP address
+    const ipPattern = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/
+    if (site.ssl_status !== 'active' && ipPattern.test(site.domain)) {
+      alert("Hata: IP adresleri (örneğin 10.2.42.87) veya yerel adresler için Let's Encrypt SSL sertifikası üretilemez. Lütfen sitenizin ayarlarından gerçek bir alan adı (domain) tanımlayın.")
+      return
+    }
+
     try {
       if (site.ssl_status === 'active') {
         await pb.send(`/api/dashboard/sites/${id}/ssl/disable`, { method: 'POST' })
@@ -291,8 +299,16 @@ export default function SiteDetail() {
                         <p className="font-medium text-sm">{db.name}</p>
                         <p className="text-xs text-gray-500">Port: {db.port} | {db.admin_email}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <span className="text-xs text-gray-400">{db.db_type}</span>
+                        <a
+                          href={`http://${site.domain}:${db.port}/_/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                          Yönet
+                        </a>
                         <button
                           onClick={() => deleteDatabase(db)}
                           className="text-red-500 hover:text-red-700 text-sm"

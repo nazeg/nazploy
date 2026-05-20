@@ -70,6 +70,7 @@ type Database struct {
 type CreateSiteRequest struct {
 	Name       string `json:"name"`
 	Domain     string `json:"domain"`
+	Port       int    `json:"port,omitempty"`
 	SiteType   string `json:"site_type"`
 	ProxyURL   string `json:"proxy_url,omitempty"`
 	AdminEmail string `json:"admin_email,omitempty"`
@@ -79,6 +80,7 @@ type CreateSiteRequest struct {
 type UpdateSiteRequest struct {
 	Name          *string `json:"name,omitempty"`
 	Domain        *string `json:"domain,omitempty"`
+	Port          *int    `json:"port,omitempty"`
 	SiteType      *string `json:"site_type,omitempty"`
 	ProxyURL      *string `json:"proxy_url,omitempty"`
 	AdminEmail    *string `json:"admin_email,omitempty"`

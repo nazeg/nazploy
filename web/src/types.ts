@@ -40,6 +40,7 @@ export interface Stats {
 export interface CreateSiteRequest {
   name: string
   domain: string
+  port?: number
   site_type: 'static' | 'proxy' | 'pocketbase'
   proxy_url?: string
   admin_email?: string

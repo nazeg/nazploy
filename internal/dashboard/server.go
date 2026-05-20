@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/pocketbase/dbx"
@@ -37,24 +39,24 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "name and domain are required"})
 	}
 
-	// Allocate port (Nginx listen port)
-	port, err := pm.Next()
-	if err != nil {
-		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	// Determine port (either manual or auto-allocated)
+	var port int
+	var err error
+	if req.Port != 0 {
+		port = req.Port
+	} else {
+		port, err = pm.Next()
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
 	}
 
-	// Create web root
-	rootDir, err := ngx.CreateWebRoot(req.Domain)
-	if err != nil {
-		pm.Release(port)
-		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	// Create Pocketbase record
+	// Create Pocketbase record first to get a unique ID
 	collection, err := app.FindCollectionByNameOrId("sites")
 	if err != nil {
-		pm.Release(port)
-		os.RemoveAll(rootDir)
+		if req.Port == 0 {
+			pm.Release(port)
+		}
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "sites collection not found"})
 	}
 
@@ -62,11 +64,21 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	record.Set("name", req.Name)
 	record.Set("domain", req.Domain)
 	record.Set("port", port)
-	record.Set("root_dir", rootDir)
 	record.Set("site_type", req.SiteType)
 	record.Set("ssl_status", SSLStatusNone)
 	record.Set("status", SiteStatusActive)
 	record.Set("notes", req.Notes)
+
+	// Create web root (site name slug + record ID)
+	folderName := sanitizeSlug(req.Name) + "_" + record.Id
+	rootDir, err := ngx.CreateWebRoot(folderName)
+	if err != nil {
+		if req.Port == 0 {
+			pm.Release(port)
+		}
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	record.Set("root_dir", rootDir)
 
 	var backendPort int
 	proxyURL := req.ProxyURL
@@ -75,14 +87,18 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		record.Set("proxy_url", req.ProxyURL)
 	} else if req.SiteType == SiteTypePocketbase {
 		if req.AdminEmail == "" {
-			pm.Release(port)
+			if req.Port == 0 {
+				pm.Release(port)
+			}
 			os.RemoveAll(rootDir)
 			return e.JSON(http.StatusBadRequest, map[string]string{"error": "admin email is required for pocketbase site"})
 		}
 		// Allocate second port for PocketBase process
 		bp, err := pm.Next()
 		if err != nil {
-			pm.Release(port)
+			if req.Port == 0 {
+				pm.Release(port)
+			}
 			os.RemoveAll(rootDir)
 			return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to allocate pocketbase port: " + err.Error()})
 		}
@@ -96,7 +112,9 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	}
 
 	if err := app.Save(record); err != nil {
-		pm.Release(port)
+		if req.Port == 0 {
+			pm.Release(port)
+		}
 		if backendPort > 0 {
 			pm.Release(backendPort)
 		}
@@ -156,11 +174,18 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
+	oldDomain := record.GetString("domain")
+	var domainChanged bool
+
 	if req.Name != nil {
 		record.Set("name", *req.Name)
 	}
-	if req.Domain != nil {
+	if req.Domain != nil && *req.Domain != oldDomain {
 		record.Set("domain", *req.Domain)
+		domainChanged = true
+	}
+	if req.Port != nil {
+		record.Set("port", *req.Port)
 	}
 	if req.SiteType != nil {
 		record.Set("site_type", *req.SiteType)
@@ -177,6 +202,11 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 
 	if err := app.Save(record); err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// Clean up old domain config in Nginx if domain changed
+	if domainChanged {
+		ngx.RemoveConfig(oldDomain)
 	}
 
 	// Regenerate Nginx config
@@ -592,7 +622,7 @@ func startPocketbaseService(id string, port int, adminEmail, adminPassword strin
 			executable = "pocketbase"
 		}
 
-		cmd := exec.Command(executable, "serve", "--dir="+dataDir, fmt.Sprintf("--http=127.0.0.1:%d", port))
+		cmd := exec.Command(executable, "serve", "--dir="+dataDir, fmt.Sprintf("--http=0.0.0.0:%d", port))
 		err = cmd.Start()
 		if err != nil {
 			log.Printf("Failed to start pocketbase locally: %v", err)
@@ -623,7 +653,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=%s
-ExecStart=%s serve --dir=%s --http=127.0.0.1:%d
+ExecStart=%s serve --dir=%s --http=0.0.0.0:%d
 Restart=always
 
 [Install]
@@ -667,4 +697,17 @@ func killProcessOnPort(port int) {
 		return
 	}
 	exec.Command("fuser", "-k", fmt.Sprintf("%d/tcp", port)).Run()
+}
+
+func sanitizeSlug(s string) string {
+	s = strings.ToLower(s)
+	// Replace non-alphanumeric with hyphen
+	reg := regexp.MustCompile("[^a-z0-9]+")
+	s = reg.ReplaceAllString(s, "-")
+	// Trim hyphens
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "site"
+	}
+	return s
 }

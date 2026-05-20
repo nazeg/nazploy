@@ -34,7 +34,7 @@ func init() {
 			&core.TextField{Name: "notes"},
 		)
 
-		sitesCollection.AddIndex("idx_sites_domain", true, "domain", "")
+		sitesCollection.AddIndex("idx_sites_domain", false, "domain", "")
 
 		if err := app.Save(sitesCollection); err != nil {
 			return err
