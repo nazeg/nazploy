@@ -100,8 +100,48 @@ run_step() {
   fi
 }
 
+# Dinamik Sürüm Tespit Fonksiyonları
+get_latest_go_version() {
+  local ver
+  ver=$(curl -sSL --max-time 5 "https://go.dev/VERSION?m=text" 2>/dev/null | head -1 | sed 's/^go//')
+  if [ -z "$ver" ]; then
+    echo "1.25.0" # fallback
+  else
+    echo "$ver"
+  fi
+}
+
+get_latest_node_lts_major() {
+  local major
+  major=$(curl -sSL --max-time 5 "https://nodejs.org/dist/index.json" 2>/dev/null | \
+    python3 -c "import sys,json
+data=json.load(sys.stdin)
+for v in data:
+    if v.get('lts'):
+        print(v['version'].lstrip('v').split('.')[0])
+        break" 2>/dev/null)
+  if [ -z "$major" ]; then
+    echo "20" # fallback
+  else
+    echo "$major"
+  fi
+}
+
+get_latest_pocketbase_version() {
+  local ver
+  ver=$(curl -sSL --max-time 5 "https://api.github.com/repos/pocketbase/pocketbase/releases/latest" 2>/dev/null | \
+    grep -oP '"tag_name":\s*"v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  if [ -z "$ver" ]; then
+    echo "0.30.2" # fallback
+  else
+    echo "$ver"
+  fi
+}
+
 install_go() {
-  local GO_VERSION="1.25.0"
+  local GO_VERSION
+  GO_VERSION=$(get_latest_go_version)
+  echo "  → Go $GO_VERSION indiriliyor..." >> "$LOG_FILE"
   rm -rf /usr/local/go
   curl -L -o /tmp/go.tar.gz "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz"
   tar -C /usr/local -xzf /tmp/go.tar.gz
@@ -114,6 +154,13 @@ install_go() {
 clear
 print_banner
 print_system_diagnostics
+
+echo -e "📦 ${BOLD}Sürüm Tespiti Yapılıyor...${NC}"
+DETECTED_GO=$(get_latest_go_version)
+DETECTED_NODE=$(get_latest_node_lts_major)
+DETECTED_PB=$(get_latest_pocketbase_version)
+echo -e "  📌 ${CYAN}Go:${NC} v${DETECTED_GO}  ${CYAN}Node.js LTS:${NC} v${DETECTED_NODE}.x  ${CYAN}PocketBase:${NC} v${DETECTED_PB}"
+echo ""
 
 echo -e "🚀 ${BOLD}Kurulum Başlatılıyor...${NC}"
 
@@ -130,7 +177,8 @@ fi
 
 # Node.js Kurulumu
 if ! command -v node &> /dev/null; then
-  run_step "NodeSource Node.js 20.x deposu ekleniyor" bash -c "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+  NODE_MAJOR=$(get_latest_node_lts_major)
+  run_step "NodeSource Node.js ${NODE_MAJOR}.x deposu ekleniyor" bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
   run_step "Node.js paketleri kuruluyor" apt-get install -y nodejs
 else
   echo -e "  ✔️  ${GREEN}Node.js zaten kurulu${NC} ($(node -v))"
@@ -148,9 +196,10 @@ fi
 # 4. Klasör Yapısının Hazırlanması
 run_step "Gerekli dizin yapısı hazırlanıyor" mkdir -p /var/lib/dashboard/databases /var/www /root/nazploy
 
-# Resmi PocketBase v0.30.2 temiz binary indirme (alt database örnekleri için)
+# PocketBase binary indirme (alt database örnekleri için)
 if [ ! -f "/root/nazploy/pocketbase_bin" ]; then
-  run_step "PocketBase resmi binary indiriliyor" bash -c "curl -L -o /tmp/pb.zip https://github.com/pocketbase/pocketbase/releases/download/v0.30.2/pocketbase_0.30.2_linux_amd64.zip && unzip -o /tmp/pb.zip pocketbase -d /tmp/ && mv /tmp/pocketbase /root/nazploy/pocketbase_bin && chmod +x /root/nazploy/pocketbase_bin && rm -f /tmp/pb.zip"
+  PB_VERSION=$(get_latest_pocketbase_version)
+  run_step "PocketBase v${PB_VERSION} resmi binary indiriliyor" bash -c "curl -L -o /tmp/pb.zip https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip && unzip -o /tmp/pb.zip pocketbase -d /tmp/ && mv /tmp/pocketbase /root/nazploy/pocketbase_bin && chmod +x /root/nazploy/pocketbase_bin && rm -f /tmp/pb.zip"
 else
   echo -e "  ✔️  ${GREEN}PocketBase şablon binary zaten mevcut${NC}"
 fi
@@ -206,6 +255,10 @@ run_step "Servisler etkinleştiriliyor ve başlatılıyor" bash -c "systemctl da
 
 # 10. Bitiş Ekranı
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "SUNUCU_IP")
+
+# PocketBase'in başlatılması ve ilk setup linkinin üretilmesi için kısa bekleme
+sleep 3
+
 echo ""
 echo -e "${GREEN}${BOLD}========================================================${NC}"
 echo -e "🎉 ${GREEN}${BOLD}KURULUM BAŞARIYLA TAMAMLANDI!${NC}"
@@ -213,6 +266,16 @@ echo -e "🚀 Nazploy başarıyla kuruldu ve arka planda başlatıldı."
 echo -e "🌐 Yönetim Paneli Adresi: ${CYAN}${BOLD}http://${LOCAL_IP}:8090${NC}"
 echo -e "${GREEN}${BOLD}========================================================${NC}"
 echo ""
+
+# İlk kurulum linkini journalctl'den yakala ve göster
+SETUP_LINK=$(journalctl -u nazploy -n 30 --no-pager 2>/dev/null | grep -oP 'http://[^\s]+' | head -1)
+if [ -n "$SETUP_LINK" ]; then
+  echo -e "🔑 ${YELLOW}${BOLD}İLK KURULUM:${NC} Admin hesabı oluşturmak için aşağıdaki linki tarayıcınızda açın:"
+  echo -e "   ${CYAN}${BOLD}${SETUP_LINK}${NC}"
+  echo ""
+fi
+
 echo -e "${YELLOW}${BOLD}Servis Durumu (journalctl):${NC}"
-journalctl -u nazploy -n 10 --no-pager | sed 's/^/  /'
+journalctl -u nazploy -n 15 --no-pager | sed 's/^/  /'
 echo ""
+
