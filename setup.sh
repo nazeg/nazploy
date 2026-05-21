@@ -215,7 +215,7 @@ install_go() {
   echo "  → Go $GO_VERSION indiriliyor..." >> "$LOG_FILE"
 
   snap remove go 2>/dev/null || true
-  apt-get remove -y golang-go 2>/dev/null || true
+  DEBIAN_FRONTEND=noninteractive apt-get remove -y golang-go 2>/dev/null || true
   rm -rf /usr/local/go
   rm -f /usr/bin/go /usr/local/bin/go /usr/bin/gofmt /usr/local/bin/gofmt
 
@@ -244,7 +244,7 @@ echo -e "🚀 ${BOLD}Kurulum Başlatılıyor...${NC}"
 
 # 2. Bağımlılıkların Kurulumu
 run_step "Sistem paket listesi güncelleniyor (apt update)" apt-get update
-run_step "Temel sistem bağımlılıkları yükleniyor" apt-get install -y nginx certbot python3-certbot-nginx git curl unzip
+run_step "Temel sistem bağımlılıkları yükleniyor" bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot python3-certbot-nginx git curl unzip"
 
 # Node.js Kurulumu — sürüm kontrolü eklendi
 INSTALLED_NODE_VER=""
@@ -255,12 +255,12 @@ fi
 if [ -z "$INSTALLED_NODE_VER" ]; then
   NODE_MAJOR=$(get_latest_node_lts_major)
   run_step "NodeSource Node.js ${NODE_MAJOR}.x deposu ekleniyor" bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
-  run_step "Node.js paketleri kuruluyor" apt-get install -y nodejs
+  run_step "Node.js paketleri kuruluyor" bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades --allow-change-held-packages nodejs"
 elif ! version_gte "$INSTALLED_NODE_VER" "$DETECTED_NODE_VER"; then
   echo -e "  ⚠️  ${YELLOW}Kurulu Node.js (v${INSTALLED_NODE_VER}) yetersiz, v${DETECTED_NODE_VER} gerekiyor. Güncelleniyor...${NC}"
   NODE_MAJOR=$(get_latest_node_lts_major)
   run_step "NodeSource Node.js ${NODE_MAJOR}.x deposu güncelleniyor" bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
-  run_step "Node.js güncelleniyor" apt-get install -y nodejs
+  run_step "Node.js güncelleniyor" bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades --allow-change-held-packages nodejs"
 else
   echo -e "  ✔️  ${GREEN}Node.js zaten güncel${NC} (v${INSTALLED_NODE_VER})"
 fi
