@@ -1,6 +1,18 @@
 #!/bin/bash
 set -e
 
+# Global temizlik: beklenmedik çıkışlarda spinner'ı öldür, terminali düzelt
+_SPINNER_PID=""
+cleanup() {
+  if [ -n "$_SPINNER_PID" ] && kill -0 "$_SPINNER_PID" 2>/dev/null; then
+    kill "$_SPINNER_PID" 2>/dev/null
+    wait "$_SPINNER_PID" 2>/dev/null || true
+  fi
+  tput cnorm 2>/dev/null || true  # cursor'ı geri getir
+  echo ""
+}
+trap cleanup EXIT
+
 # ANSI Color Codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,7 +55,6 @@ LOGO
 print_system_diagnostics() {
   echo -e "🔍 ${BOLD}Sunucu Sistem Bilgileri:${NC}"
   
-  # OS Name
   if [ -f /etc/os-release ]; then
     OS_NAME=$(grep -w "PRETTY_NAME" /etc/os-release | cut -d= -f2 | tr -d '"')
     echo -e "  🌐 ${CYAN}İşletim Sistemi:${NC} $OS_NAME"
@@ -51,7 +62,6 @@ print_system_diagnostics() {
     echo -e "  🌐 ${CYAN}İşletim Sistemi:${NC} Bilinmiyor"
   fi
 
-  # CPU Cores
   if command -v nproc &> /dev/null; then
     CPU_CORES=$(nproc)
     echo -e "  🧠 ${CYAN}CPU Çekirdek Sayısı:${NC} $CPU_CORES"
@@ -59,7 +69,6 @@ print_system_diagnostics() {
     echo -e "  🧠 ${CYAN}CPU Çekirdek Sayısı:${NC} Bilinmiyor"
   fi
 
-  # RAM Info
   if command -v free &> /dev/null; then
     RAM_TOTAL=$(free -h | awk '/^Mem:/{print $2}')
     echo -e "  ⚡ ${CYAN}Toplam RAM:${NC} $RAM_TOTAL"
@@ -70,7 +79,6 @@ print_system_diagnostics() {
     echo -e "  ⚡ ${CYAN}Toplam RAM:${NC} Bilinmiyor"
   fi
 
-  # Disk Info
   if command -v df &> /dev/null; then
     DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
     echo -e "  💾 ${CYAN}Boş Disk Alanı (Root):${NC} $DISK_FREE"
@@ -78,18 +86,44 @@ print_system_diagnostics() {
     echo -e "  💾 ${CYAN}Boş Disk Alanı (Root):${NC} Bilinmiyor"
   fi
 
-  # Local IP detection
   LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
   echo -e "  🆔 ${CYAN}Sunucu IP Adresi:${NC} $LOCAL_IP"
   echo ""
 }
 
-# Adım Çalıştırma Fonksiyonu
+# Spinner Animasyonu ile Adım Çalıştırma Fonksiyonu
 run_step() {
   local msg=$1
   shift
-  echo -ne "  ⚙️  $msg... "
-  if "$@" >> "$LOG_FILE" 2>&1; then
+
+  local spin_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local spin_i=0
+
+  tput civis 2>/dev/null || true  # cursor'ı gizle
+
+  # Spinner arka planda döner; PID'i global değişkene yaz
+  (
+    while true; do
+      local c="${spin_chars:$spin_i:1}"
+      echo -ne "\r\033[K  ${CYAN}${c}${NC}  $msg... "
+      spin_i=$(( (spin_i + 1) % ${#spin_chars} ))
+      sleep 0.1
+    done
+  ) &
+  _SPINNER_PID=$!
+
+  # Asıl komutu çalıştır
+  local exit_code=0
+  "$@" >> "$LOG_FILE" 2>&1 || exit_code=$?
+
+  # Spinner'ı durdur
+  kill "$_SPINNER_PID" 2>/dev/null
+  wait "$_SPINNER_PID" 2>/dev/null || true
+  _SPINNER_PID=""
+
+  tput cnorm 2>/dev/null || true  # cursor'ı geri getir
+
+  if [ "$exit_code" -eq 0 ]; then
     echo -e "\r\033[K  ✔️  ${GREEN}$msg${NC}"
   else
     echo -e "\r\033[K  ❌  ${RED}$msg BAŞARISIZ OLDU!${NC}"
@@ -100,12 +134,23 @@ run_step() {
   fi
 }
 
+# Sürüm karşılaştırma yardımcısı
+# Kullanım: version_gte "1.21.0" "1.20.5"  → 0 (true) eğer ilk >= ikinci
+version_gte() {
+  [ "$(printf '%s\n' "$1" "$2" | sort -V | head -1)" = "$2" ]
+}
+
 # Dinamik Sürüm Tespit Fonksiyonları
+
 get_latest_go_version() {
   local ver
-  ver=$(curl -sSL --max-time 5 "https://go.dev/VERSION?m=text" 2>/dev/null | head -1 | sed 's/^go//')
-  if [ -z "$ver" ]; then
-    echo "1.25.0" # fallback
+  # \r karakterini temizle (bazı sistemlerde curl çıktısında bulunabilir)
+  ver=$(curl -sSL --max-time 10 "https://go.dev/VERSION?m=text" 2>/dev/null \
+    | head -1 \
+    | tr -d '\r' \
+    | sed 's/^go//')
+  if [ -z "$ver" ] || ! echo "$ver" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+    echo "1.24.3" # fallback — güncel tutun
   else
     echo "$ver"
   fi
@@ -113,26 +158,52 @@ get_latest_go_version() {
 
 get_latest_node_lts_major() {
   local major
-  major=$(curl -sSL --max-time 5 "https://nodejs.org/dist/index.json" 2>/dev/null | \
-    python3 -c "import sys,json
-data=json.load(sys.stdin)
-for v in data:
-    if v.get('lts'):
-        print(v['version'].lstrip('v').split('.')[0])
-        break" 2>/dev/null)
-  if [ -z "$major" ]; then
-    echo "20" # fallback
+  major=$(curl -sSL --max-time 10 "https://nodejs.org/dist/index.json" 2>/dev/null | \
+    python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for v in data:
+        if v.get('lts'):
+            print(v['version'].lstrip('v').split('.')[0])
+            break
+except Exception:
+    pass
+" 2>/dev/null)
+  if [ -z "$major" ] || ! echo "$major" | grep -qE '^[0-9]+$'; then
+    echo "22" # fallback — güncel tutun
   else
     echo "$major"
   fi
 }
 
+get_latest_node_version() {
+  local ver
+  ver=$(curl -sSL --max-time 10 "https://nodejs.org/dist/index.json" 2>/dev/null | \
+    python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for v in data:
+        if v.get('lts'):
+            print(v['version'].lstrip('v'))
+            break
+except Exception:
+    pass
+" 2>/dev/null)
+  if [ -z "$ver" ] || ! echo "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "22.0.0" # fallback
+  else
+    echo "$ver"
+  fi
+}
+
 get_latest_pocketbase_version() {
   local ver
-  ver=$(curl -sSL --max-time 5 "https://api.github.com/repos/pocketbase/pocketbase/releases/latest" 2>/dev/null | \
+  ver=$(curl -sSL --max-time 10 "https://api.github.com/repos/pocketbase/pocketbase/releases/latest" 2>/dev/null | \
     grep -oP '"tag_name":\s*"v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [ -z "$ver" ]; then
-    echo "0.30.2" # fallback
+  if [ -z "$ver" ] || ! echo "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "0.28.2" # fallback — güncel tutun
   else
     echo "$ver"
   fi
@@ -143,13 +214,12 @@ install_go() {
   GO_VERSION=$(get_latest_go_version)
   echo "  → Go $GO_VERSION indiriliyor..." >> "$LOG_FILE"
 
-  # Eski Go kurulumlarını temizle (snap, apt, manuel)
   snap remove go 2>/dev/null || true
   apt-get remove -y golang-go 2>/dev/null || true
   rm -rf /usr/local/go
   rm -f /usr/bin/go /usr/local/bin/go /usr/bin/gofmt /usr/local/bin/gofmt
 
-  curl -L -o /tmp/go.tar.gz "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz"
+  curl -L --max-time 120 -o /tmp/go.tar.gz "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz"
   tar -C /usr/local -xzf /tmp/go.tar.gz
   rm -f /tmp/go.tar.gz
   ln -sf /usr/local/go/bin/go /usr/bin/go
@@ -165,6 +235,7 @@ print_system_diagnostics
 echo -e "📦 ${BOLD}Sürüm Tespiti Yapılıyor...${NC}"
 DETECTED_GO=$(get_latest_go_version)
 DETECTED_NODE=$(get_latest_node_lts_major)
+DETECTED_NODE_VER=$(get_latest_node_version)
 DETECTED_PB=$(get_latest_pocketbase_version)
 echo -e "  📌 ${CYAN}Go:${NC} v${DETECTED_GO}  ${CYAN}Node.js LTS:${NC} v${DETECTED_NODE}.x  ${CYAN}PocketBase:${NC} v${DETECTED_PB}"
 echo ""
@@ -175,13 +246,23 @@ echo -e "🚀 ${BOLD}Kurulum Başlatılıyor...${NC}"
 run_step "Sistem paket listesi güncelleniyor (apt update)" apt-get update
 run_step "Temel sistem bağımlılıkları yükleniyor" apt-get install -y nginx certbot python3-certbot-nginx git curl unzip
 
-# Node.js Kurulumu
-if ! command -v node &> /dev/null; then
+# Node.js Kurulumu — sürüm kontrolü eklendi
+INSTALLED_NODE_VER=""
+if command -v node &> /dev/null; then
+  INSTALLED_NODE_VER=$(node -v 2>/dev/null | tr -d '\r' | sed 's/^v//')
+fi
+
+if [ -z "$INSTALLED_NODE_VER" ]; then
   NODE_MAJOR=$(get_latest_node_lts_major)
   run_step "NodeSource Node.js ${NODE_MAJOR}.x deposu ekleniyor" bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
   run_step "Node.js paketleri kuruluyor" apt-get install -y nodejs
+elif ! version_gte "$INSTALLED_NODE_VER" "$DETECTED_NODE_VER"; then
+  echo -e "  ⚠️  ${YELLOW}Kurulu Node.js (v${INSTALLED_NODE_VER}) yetersiz, v${DETECTED_NODE_VER} gerekiyor. Güncelleniyor...${NC}"
+  NODE_MAJOR=$(get_latest_node_lts_major)
+  run_step "NodeSource Node.js ${NODE_MAJOR}.x deposu güncelleniyor" bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
+  run_step "Node.js güncelleniyor" apt-get install -y nodejs
 else
-  echo -e "  ✔️  ${GREEN}Node.js zaten kurulu${NC} ($(node -v))"
+  echo -e "  ✔️  ${GREEN}Node.js zaten güncel${NC} (v${INSTALLED_NODE_VER})"
 fi
 
 # 3. Projenin Klonlanması veya Güncellenmesi (Go kontrolünden ÖNCE)
@@ -193,21 +274,24 @@ else
 fi
 cd /root/nazploy-src
 
-# Go Kurulumu (go.mod'dan gereken versiyonu oku, karşılaştır)
-REQUIRED_GO=$(sed -n 's/^go \([0-9][0-9.]*\).*/\1/p' /root/nazploy-src/go.mod | head -1)
+# Go Kurulumu — go.mod'dan gereken sürümü oku, karşılaştır
+REQUIRED_GO=$(sed -n 's/^go \([0-9][0-9.]*\).*/\1/p' /root/nazploy-src/go.mod | head -1 | tr -d '\r')
 
 INSTALLED_GO=""
 if [ -x /usr/local/go/bin/go ]; then
-  INSTALLED_GO=$(/usr/local/go/bin/go version | sed -n 's/.*go\([0-9][0-9.]*\).*/\1/p' | head -1)
+  INSTALLED_GO=$(/usr/local/go/bin/go version 2>/dev/null \
+    | sed -n 's/.*go\([0-9][0-9.]*\).*/\1/p' \
+    | head -1 \
+    | tr -d '\r')
 fi
 
 if [ -z "$INSTALLED_GO" ]; then
-  run_step "Go programlama dili kuruluyor (tar.gz)" install_go
-elif [ -n "$REQUIRED_GO" ] && [ "$(printf '%s\n' "$REQUIRED_GO" "$INSTALLED_GO" | sort -V | head -1)" != "$REQUIRED_GO" ]; then
+  run_step "Go programlama dili kuruluyor (v${DETECTED_GO})" install_go
+elif [ -n "$REQUIRED_GO" ] && ! version_gte "$INSTALLED_GO" "$REQUIRED_GO"; then
   echo -e "  ⚠️  ${YELLOW}Kurulu Go (v${INSTALLED_GO}) yetersiz, go.mod v${REQUIRED_GO}+ gerektiriyor. Güncelleniyor...${NC}"
-  run_step "Go programlama dili güncelleniyor (tar.gz)" install_go
+  run_step "Go programlama dili güncelleniyor (v${DETECTED_GO})" install_go
 else
-  echo -e "  ✔️  ${GREEN}Go programlama dili zaten kurulu${NC} (v${INSTALLED_GO})"
+  echo -e "  ✔️  ${GREEN}Go programlama dili zaten güncel${NC} (v${INSTALLED_GO})"
 fi
 
 # 4. Klasör Yapısının Hazırlanması
@@ -216,7 +300,13 @@ run_step "Gerekli dizin yapısı hazırlanıyor" mkdir -p /var/lib/dashboard/dat
 # PocketBase binary indirme (alt database örnekleri için)
 if [ ! -f "/root/nazploy/pocketbase_bin" ]; then
   PB_VERSION=$(get_latest_pocketbase_version)
-  run_step "PocketBase v${PB_VERSION} resmi binary indiriliyor" bash -c "curl -L -o /tmp/pb.zip https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip && unzip -o /tmp/pb.zip pocketbase -d /tmp/ && mv /tmp/pocketbase /root/nazploy/pocketbase_bin && chmod +x /root/nazploy/pocketbase_bin && rm -f /tmp/pb.zip"
+  run_step "PocketBase v${PB_VERSION} resmi binary indiriliyor" bash -c "
+    curl -L --max-time 120 -o /tmp/pb.zip \
+      https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip && \
+    unzip -o /tmp/pb.zip pocketbase -d /tmp/ && \
+    mv /tmp/pocketbase /root/nazploy/pocketbase_bin && \
+    chmod +x /root/nazploy/pocketbase_bin && \
+    rm -f /tmp/pb.zip"
 else
   echo -e "  ✔️  ${GREEN}PocketBase şablon binary zaten mevcut${NC}"
 fi
@@ -227,7 +317,7 @@ run_step "Frontend bağımlılıkları temizlenip yükleniyor" bash -c "rm -rf n
 run_step "Frontend derleniyor (Vite build)" npm run build --unsafe-perm=true
 cd ..
 
-# 6. Disk alanı temizliği (node_modules ve Go cache gereksiz dosyalar)
+# 6. Disk alanı temizliği
 run_step "Geçici dosyalar temizleniyor (disk alanı açılıyor)" bash -c "rm -rf /root/nazploy-src/web/node_modules && apt-get clean && rm -rf /var/lib/apt/lists/*"
 
 # 7. Backend Derleme (Build)
@@ -239,7 +329,6 @@ run_step "Backend Go uygulaması derleniyor" /usr/local/go/bin/go build -o /root
 create_systemd_service() {
   DEPLOY_USER=${SUDO_USER:-root}
   
-  # Eski dashboard servisini durdur ve sil (varsa geçiş için)
   if systemctl is-active --quiet dashboard; then
     systemctl stop dashboard &>/dev/null || true
     systemctl disable dashboard &>/dev/null || true
@@ -272,7 +361,6 @@ run_step "Servisler etkinleştiriliyor ve başlatılıyor" bash -c "systemctl da
 # 10. Bitiş Ekranı
 LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "SUNUCU_IP")
 
-# Setup linkini bekle
 SETUP_LINK=""
 for i in $(seq 1 15); do
   sleep 1
@@ -298,4 +386,3 @@ else
   echo -e "   journalctl -u nazploy -n 30 --no-pager"
 fi
 echo ""
-
