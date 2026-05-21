@@ -1,6 +1,21 @@
 #!/bin/bash
 set -e
 
+# curl | bash ile çalıştırıldığında root değilse sudo ile yeniden başlat
+if [ "$EUID" -ne 0 ]; then
+  echo "🔐 Root yetkisi gerekiyor, sudo ile yeniden başlatılıyor..."
+  SELF="$(mktemp /tmp/nazploy_setup.XXXXXX.sh)"
+  if [ -f "$0" ] && [ "$0" != "bash" ] && [ "$0" != "/bin/bash" ]; then
+    cp "$0" "$SELF"
+  else
+    # pipe ile geldi, kendini /proc/self/fd/0 üzerinden oku
+    cat /proc/$$/fd/255 > "$SELF" 2>/dev/null || cat "$0" > "$SELF" 2>/dev/null || true
+  fi
+  chmod +x "$SELF"
+  exec sudo bash "$SELF" "$@"
+fi
+
+
 # Global temizlik: beklenmedik çıkışlarda spinner'ı öldür, terminali düzelt
 _SPINNER_PID=""
 cleanup() {
