@@ -21,13 +21,13 @@ usage() {
   echo ""
   echo -e "Kullanım: ${CYAN}sudo ./dev-deploy.sh [seçenek]${NC}"
   echo ""
-  echo -e "  ${GREEN}--all${NC}        Frontend + Backend derle, servisi yeniden başlat (varsayılan)"
+  echo -e "  ${GREEN}--all${NC}        Git pull + Frontend + Backend derle, servisi yeniden başlat (varsayılan)"
+  echo -e "  ${GREEN}--local${NC}      Sadece yerel kodları derle, servisi yeniden başlat (git pull yok)"
   echo -e "  ${GREEN}--frontend${NC}   Sadece frontend derle, servisi yeniden başlat"
   echo -e "  ${GREEN}--backend${NC}    Sadece backend derle, servisi yeniden başlat"
   echo -e "  ${GREEN}--restart${NC}    Sadece servisi yeniden başlat (derleme yok)"
   echo -e "  ${GREEN}--status${NC}     Servis durumunu göster"
   echo -e "  ${GREEN}--logs${NC}       Son logları göster"
-  echo -e "  ${GREEN}--pull${NC}       Git pull + tam derleme + restart"
   echo -e "  ${GREEN}--help${NC}       Bu yardım mesajı"
   echo ""
   exit 0
@@ -134,13 +134,13 @@ case "$MODE" in
   --restart|-r)
     do_restart
     ;;
-  --pull|-p)
+  --pull|-p|--all|-a|"")
     do_git_pull
     do_frontend
     do_backend
     do_restart
     ;;
-  --all|-a|"")
+  --local|-l)
     do_frontend
     do_backend
     do_restart
