@@ -819,16 +819,26 @@ func runCommand(name string, args ...string) error {
 
 func startPocketbaseService(id string, port int, adminEmail, adminPassword string) error {
 	if runtime.GOOS == "windows" {
-		dataDir := filepath.Join("d:\\WEB\\nazploydashboard2\\dashboard\\databases", id)
+		cwd, _ := os.Getwd()
+		dataDir := filepath.Join(cwd, "databases", id)
 		os.MkdirAll(dataDir, 0755)
 
-		executable, err := os.Executable()
-		if err != nil {
-			executable = "pocketbase"
+		executable := "pocketbase"
+		if _, err := exec.LookPath("pocketbase"); err != nil {
+			localPB := filepath.Join(cwd, "pocketbase.exe")
+			if _, errLocal := os.Stat(localPB); errLocal == nil {
+				executable = localPB
+			} else {
+				var errExe error
+				executable, errExe = os.Executable()
+				if errExe != nil {
+					executable = "pocketbase"
+				}
+			}
 		}
 
 		cmd := exec.Command(executable, "serve", "--dir="+dataDir, fmt.Sprintf("--http=0.0.0.0:%d", port))
-		err = cmd.Start()
+		err := cmd.Start()
 		if err != nil {
 			log.Printf("Failed to start pocketbase locally: %v", err)
 			return err
@@ -844,12 +854,16 @@ func startPocketbaseService(id string, port int, adminEmail, adminPassword strin
 	dataDir := fmt.Sprintf("/var/lib/dashboard/databases/%s", id)
 	os.MkdirAll(dataDir, 0755)
 
-	executable := "/root/dashboard/pocketbase_bin"
+	executable := "/root/nazploy/pocketbase_bin"
 	if _, err := os.Stat(executable); os.IsNotExist(err) {
-		var errExe error
-		executable, errExe = os.Executable()
-		if errExe != nil {
+		if _, errPath := exec.LookPath("pocketbase"); errPath == nil {
 			executable = "pocketbase"
+		} else {
+			var errExe error
+			executable, errExe = os.Executable()
+			if errExe != nil {
+				executable = "pocketbase"
+			}
 		}
 	}
 
