@@ -15,7 +15,7 @@ export default function SiteDetail() {
   // Database form
   const [showDbForm, setShowDbForm] = useState(false)
   const [dbName, setDbName] = useState('')
-  const [dbEmail, setDbEmail] = useState('')
+  const [dbEmail, setDbEmail] = useState('nazmiegret@gmail.com')
   const [dbLoading, setDbLoading] = useState(false)
 
   // Git deploy

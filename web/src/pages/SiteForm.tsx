@@ -15,7 +15,7 @@ export default function SiteForm() {
   const [port, setPort] = useState<number | ''>('')
   const [siteType, setSiteType] = useState<'static' | 'proxy' | 'pocketbase'>('static')
   const [proxyUrl, setProxyUrl] = useState('')
-  const [adminEmail, setAdminEmail] = useState('')
+  const [adminEmail, setAdminEmail] = useState('nazmiegret@gmail.com')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')

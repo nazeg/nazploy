@@ -152,7 +152,7 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 
 	// Start PocketBase instance if it's a pocketbase site
 	if req.SiteType == SiteTypePocketbase {
-		go launchPocketbaseInstance(record.Id, backendPort, req.AdminEmail, record.GetString("admin_password"))
+		go launchPocketbaseInstance(record.Id, backendPort, req.AdminEmail, record.GetString("admin_password"), true)
 	}
 
 	// If git_repo is provided, clone and build in background
@@ -265,7 +265,13 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	} else {
 		// Aktif: Pocketbase servisini başlat (gerekliyse) ve Nginx konfigürasyonunu yaz
 		if record.GetString("site_type") == SiteTypePocketbase {
-			runCommand("systemctl", "start", "pocketbase-"+record.Id)
+			backendPort := 0
+			fmt.Sscanf(record.GetString("proxy_url"), "http://127.0.0.1:%d", &backendPort)
+			if backendPort > 0 {
+				startPocketbaseService(record.Id, backendPort, record.GetString("admin_email"), record.GetString("admin_password"), true)
+			} else {
+				runCommand("systemctl", "start", "pocketbase-"+record.Id)
+			}
 		}
 
 		var sslEntry *SSLEntry
@@ -412,6 +418,14 @@ func HandleDeploySite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 
 	if err := ngx.WriteConfig(record.Id, config); err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	if record.GetString("site_type") == SiteTypePocketbase {
+		backendPort := 0
+		fmt.Sscanf(record.GetString("proxy_url"), "http://127.0.0.1:%d", &backendPort)
+		if backendPort > 0 {
+			startPocketbaseService(record.Id, backendPort, record.GetString("admin_email"), record.GetString("admin_password"), true)
+		}
 	}
 
 	if err := ngx.Reload(); err != nil {
@@ -689,7 +703,7 @@ func HandleCreateDatabase(e *core.RequestEvent, app *pocketbase.PocketBase, pm *
 	}
 
 	// Launch a new Pocketbase instance for this site
-	go launchPocketbaseInstance(record.Id, port, req.AdminEmail, adminPass)
+	go launchPocketbaseInstance(record.Id, port, req.AdminEmail, adminPass, false)
 
 	return e.JSON(http.StatusCreated, record)
 }
@@ -808,8 +822,8 @@ func generatePassword(length int) string {
 	return string(b)
 }
 
-func launchPocketbaseInstance(id string, port int, adminEmail, adminPassword string) {
-	startPocketbaseService(id, port, adminEmail, adminPassword)
+func launchPocketbaseInstance(id string, port int, adminEmail, adminPassword string, localOnly bool) {
+	startPocketbaseService(id, port, adminEmail, adminPassword, localOnly)
 }
 
 func runCommand(name string, args ...string) error {
@@ -817,7 +831,12 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
-func startPocketbaseService(id string, port int, adminEmail, adminPassword string) error {
+func startPocketbaseService(id string, port int, adminEmail, adminPassword string, localOnly bool) error {
+	host := "0.0.0.0"
+	if localOnly {
+		host = "127.0.0.1"
+	}
+
 	if runtime.GOOS == "windows" {
 		cwd, _ := os.Getwd()
 		dataDir := filepath.Join(cwd, "databases", id)
@@ -837,7 +856,7 @@ func startPocketbaseService(id string, port int, adminEmail, adminPassword strin
 			}
 		}
 
-		cmd := exec.Command(executable, "serve", "--dir="+dataDir, fmt.Sprintf("--http=0.0.0.0:%d", port))
+		cmd := exec.Command(executable, "serve", "--dir="+dataDir, fmt.Sprintf("--http=%s:%d", host, port))
 		err := cmd.Start()
 		if err != nil {
 			log.Printf("Failed to start pocketbase locally: %v", err)
@@ -876,12 +895,12 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=%s
-ExecStart=%s serve --dir=%s --http=0.0.0.0:%d
+ExecStart=%s serve --dir=%s --http=%s:%d
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
-`, id, dataDir, executable, dataDir, port)
+`, id, dataDir, executable, dataDir, host, port)
 
 	servicePath := fmt.Sprintf("/etc/systemd/system/%s.service", serviceName)
 	if err := os.WriteFile(servicePath, []byte(serviceFileContent), 0644); err != nil {
