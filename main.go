@@ -50,7 +50,7 @@ func main() {
 			return dashboard.HandleUpdateSite(e, app, ngx)
 		})
 		g.DELETE("/sites/{id}", func(e *core.RequestEvent) error {
-			return dashboard.HandleDeleteSite(e, app, ngx)
+			return dashboard.HandleDeleteSite(e, app, ngx, pm)
 		})
 
 		// Deploy / reload
@@ -92,7 +92,7 @@ func main() {
 			return dashboard.HandleListDatabases(e, app)
 		})
 		g.DELETE("/sites/{id}/databases/{dbId}", func(e *core.RequestEvent) error {
-			return dashboard.HandleDeleteDatabase(e, app)
+			return dashboard.HandleDeleteDatabase(e, app, pm)
 		})
 
 		// Port management

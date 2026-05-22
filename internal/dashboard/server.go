@@ -298,7 +298,7 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	return e.JSON(http.StatusOK, record)
 }
 
-func HandleDeleteSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *NginxManager) error {
+func HandleDeleteSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *NginxManager, pm *PortManager) error {
 	record, err := app.FindRecordById("sites", e.Request.PathValue("id"))
 	if err != nil {
 		return e.JSON(http.StatusNotFound, map[string]string{"error": "site not found"})
@@ -306,12 +306,18 @@ func HandleDeleteSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 
 	domain := record.GetString("domain")
 	rootDir := record.GetString("root_dir")
+	port := record.GetInt("port")
 
 	// Remove Nginx config
 	ngx.RemoveConfig(domain)
 
 	// Remove web root
 	os.RemoveAll(rootDir)
+
+	// Release port in PortManager
+	if port > 0 {
+		pm.Release(port)
+	}
 
 	// If it's a PocketBase site, stop and remove the service
 	if record.GetString("site_type") == SiteTypePocketbase {
@@ -321,6 +327,7 @@ func HandleDeleteSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		fmt.Sscanf(record.GetString("proxy_url"), "http://127.0.0.1:%d", &backendPort)
 		if backendPort > 0 {
 			killProcessOnPort(backendPort)
+			pm.Release(backendPort)
 		}
 		// Remove DB data dir
 		dbDir := filepath.Join("/var/lib/dashboard/databases", record.Id)
@@ -335,6 +342,7 @@ func HandleDeleteSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		dbPort := db.GetInt("port")
 		if dbPort > 0 {
 			killProcessOnPort(dbPort)
+			pm.Release(dbPort)
 		}
 		// Remove db data directory
 		dbDir := filepath.Join("/var/lib/dashboard/databases", db.Id)
@@ -680,7 +688,7 @@ func HandleListDatabases(e *core.RequestEvent, app *pocketbase.PocketBase) error
 	return e.JSON(http.StatusOK, records)
 }
 
-func HandleDeleteDatabase(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+func HandleDeleteDatabase(e *core.RequestEvent, app *pocketbase.PocketBase, pm *PortManager) error {
 	dbID := e.Request.PathValue("dbId")
 
 	record, err := app.FindRecordById("databases", dbID)
@@ -692,6 +700,7 @@ func HandleDeleteDatabase(e *core.RequestEvent, app *pocketbase.PocketBase) erro
 	port := record.GetInt("port")
 	if port > 0 {
 		killProcessOnPort(port)
+		pm.Release(port)
 	}
 
 	// Remove data directory
