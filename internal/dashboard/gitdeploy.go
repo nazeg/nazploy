@@ -159,6 +159,7 @@ func CloneAndBuild(app core.App, siteID string) error {
 		args = append(args, repo, cloneDir)
 
 		cmd := exec.Command("git", args...)
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 		cmd.Stdout = io.MultiWriter(os.Stdout, &logBuf)
 		cmd.Stderr = io.MultiWriter(os.Stderr, &logBuf)
 		if err := cmd.Run(); err != nil {
