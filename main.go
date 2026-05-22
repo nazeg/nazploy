@@ -58,6 +58,11 @@ func main() {
 			return dashboard.HandleDeploySite(e, app, ngx)
 		})
 
+		// Git deploy (clone & build from GitHub)
+		g.POST("/sites/{id}/git-deploy", func(e *core.RequestEvent) error {
+			return dashboard.HandleGitDeploy(e, app, ngx)
+		})
+
 		// SSL
 		g.POST("/sites/{id}/ssl/enable", func(e *core.RequestEvent) error {
 			return dashboard.HandleEnableSSL(e, app, ngx, ssl)

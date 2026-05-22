@@ -11,6 +11,7 @@ export interface Site {
   ssl_status: 'none' | 'pending' | 'active' | 'error'
   ssl_expiry?: string
   status: 'active' | 'paused'
+  git_repo?: string
   notes?: string
   created: string
   updated: string
@@ -55,6 +56,9 @@ export interface CreateSiteRequest {
   site_type: 'static' | 'proxy' | 'pocketbase'
   proxy_url?: string
   admin_email?: string
+  git_repo?: string
+  build_cmd?: string
+  output_dir?: string
   notes?: string
 }
 

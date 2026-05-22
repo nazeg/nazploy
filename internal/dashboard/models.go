@@ -47,6 +47,7 @@ type Site struct {
 	SSLStatus     string `json:"ssl_status"`
 	SSLExpiry     string `json:"ssl_expiry,omitempty"`
 	Status        string `json:"status"`
+	GitRepo       string `json:"git_repo,omitempty"`
 	Notes         string `json:"notes,omitempty"`
 	Created       string `json:"created"`
 	Updated       string `json:"updated"`
@@ -74,7 +75,15 @@ type CreateSiteRequest struct {
 	SiteType   string `json:"site_type"`
 	ProxyURL   string `json:"proxy_url,omitempty"`
 	AdminEmail string `json:"admin_email,omitempty"`
+	GitRepo    string `json:"git_repo,omitempty"`
+	BuildCmd   string `json:"build_cmd,omitempty"`
+	OutputDir  string `json:"output_dir,omitempty"`
 	Notes      string `json:"notes,omitempty"`
+}
+
+type GitDeployRequest struct {
+	BuildCmd  string `json:"build_cmd,omitempty"`
+	OutputDir string `json:"output_dir,omitempty"`
 }
 
 type UpdateSiteRequest struct {

@@ -69,6 +69,9 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	record.Set("ssl_status", SSLStatusNone)
 	record.Set("status", SiteStatusActive)
 	record.Set("notes", req.Notes)
+	if req.GitRepo != "" {
+		record.Set("git_repo", req.GitRepo)
+	}
 
 	// Create web root (site name slug + record ID)
 	folderName := sanitizeSlug(req.Name) + "_" + record.Id
@@ -142,6 +145,17 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	// Start PocketBase instance if it's a pocketbase site
 	if req.SiteType == SiteTypePocketbase {
 		go launchPocketbaseInstance(record.Id, backendPort, req.AdminEmail, record.GetString("admin_password"))
+	}
+
+	// If git_repo is provided, clone and build in background
+	if req.GitRepo != "" {
+		go func() {
+			if err := CloneAndBuild(req.GitRepo, req.BuildCmd, req.OutputDir, rootDir); err != nil {
+				log.Printf("[GitDeploy] Hata (site: %s): %v", record.Id, err)
+			} else {
+				ngx.Reload() // reload nginx after files are in place
+			}
+		}()
 	}
 
 	// Reload Nginx
@@ -360,6 +374,42 @@ func HandleDeploySite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	}
 
 	return e.JSON(http.StatusOK, map[string]string{"message": "site deployed"})
+}
+
+// ── Git Deploy (re-deploy from GitHub) ──
+
+func HandleGitDeploy(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *NginxManager) error {
+	record, err := app.FindRecordById("sites", e.Request.PathValue("id"))
+	if err != nil {
+		return e.JSON(http.StatusNotFound, map[string]string{"error": "site not found"})
+	}
+
+	gitRepo := record.GetString("git_repo")
+	if gitRepo == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Bu site bir GitHub reposuna bağlı değil."})
+	}
+
+	if record.GetString("status") == SiteStatusPaused {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Pasif durumdaki siteler deploy edilemez."})
+	}
+
+	rootDir := record.GetString("root_dir")
+
+	// Parse optional overrides from request body
+	var req GitDeployRequest
+	e.BindBody(&req) // ignore error, fields are optional
+
+	// Run clone & build in background
+	go func() {
+		if err := CloneAndBuild(gitRepo, req.BuildCmd, req.OutputDir, rootDir); err != nil {
+			log.Printf("[GitDeploy] Hata (site: %s): %v", record.Id, err)
+		} else {
+			ngx.Reload()
+			log.Printf("[GitDeploy] Başarılı (site: %s)", record.Id)
+		}
+	}()
+
+	return e.JSON(http.StatusOK, map[string]string{"message": "GitHub deploy başlatıldı. Arka planda çalışıyor."})
 }
 
 // ── SSL ──
