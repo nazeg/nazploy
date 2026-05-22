@@ -142,7 +142,10 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "nginx config gen: " + err.Error()})
 	}
 
-	if err := ngx.WriteConfig(req.Domain, config); err != nil {
+	// Clean up old-style domain config if it exists
+	ngx.RemoveConfig(req.Domain)
+
+	if err := ngx.WriteConfig(record.Id, config); err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "nginx config write: " + err.Error()})
 	}
 
@@ -251,8 +254,10 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 
 	if status == SiteStatusPaused {
 		// Pasif: Nginx symlink'ini kaldır ve pocketbase servisini durdur
-		enabledPath := filepath.Join(NginxSitesEnabled, domain)
+		enabledPath := filepath.Join(NginxSitesEnabled, record.Id)
 		os.Remove(enabledPath)
+		// Clean up old-style domain symlink if it exists
+		os.Remove(filepath.Join(NginxSitesEnabled, domain))
 		if record.GetString("site_type") == SiteTypePocketbase {
 			runCommand("systemctl", "stop", "pocketbase-"+record.Id)
 		}
@@ -285,7 +290,10 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 			})
 		}
 
-		if err := ngx.WriteConfig(domain, config); err != nil {
+		// Clean up old-style domain config if it exists
+		ngx.RemoveConfig(domain)
+
+		if err := ngx.WriteConfig(record.Id, config); err != nil {
 			return e.JSON(http.StatusOK, map[string]interface{}{
 				"record":  record,
 				"warning": "nginx config write failed: " + err.Error(),
@@ -309,7 +317,8 @@ func HandleDeleteSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	port := record.GetInt("port")
 
 	// Remove Nginx config
-	ngx.RemoveConfig(domain)
+	ngx.RemoveConfig(record.Id)
+	ngx.RemoveConfig(domain) // Also clean up old-style domain config if it exists
 
 	// Remove web root
 	os.RemoveAll(rootDir)
@@ -395,7 +404,10 @@ func HandleDeploySite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	if err := ngx.WriteConfig(domain, config); err != nil {
+	// Clean up old-style domain config if it exists
+	ngx.RemoveConfig(domain)
+
+	if err := ngx.WriteConfig(record.Id, config); err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -557,7 +569,8 @@ func HandleEnableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 			return
 		}
 
-		ngx.WriteConfig(domain, config)
+		ngx.RemoveConfig(domain)
+		ngx.WriteConfig(record.Id, config)
 		ngx.Reload()
 	}()
 
@@ -592,7 +605,8 @@ func HandleDisableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	ngx.WriteConfig(domain, config)
+	ngx.RemoveConfig(domain)
+	ngx.WriteConfig(record.Id, config)
 	ngx.Reload()
 
 	return e.JSON(http.StatusOK, map[string]string{"message": "SSL disabled"})
