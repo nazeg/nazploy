@@ -12,6 +12,11 @@ export interface Site {
   ssl_expiry?: string
   status: 'active' | 'paused'
   git_repo?: string
+  git_branch?: string
+  build_cmd?: string
+  output_dir?: string
+  git_status?: 'idle' | 'deploying' | 'ready' | 'failed'
+  git_log?: string
   notes?: string
   created: string
   updated: string
@@ -57,6 +62,7 @@ export interface CreateSiteRequest {
   proxy_url?: string
   admin_email?: string
   git_repo?: string
+  git_branch?: string
   build_cmd?: string
   output_dir?: string
   notes?: string

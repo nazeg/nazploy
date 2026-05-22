@@ -23,6 +23,7 @@ export default function SiteForm() {
   // Git deploy state
   const [useGitDeploy, setUseGitDeploy] = useState(false)
   const [gitRepo, setGitRepo] = useState('')
+  const [gitBranch, setGitBranch] = useState('')
   const [buildCmd, setBuildCmd] = useState('')
   const [outputDir, setOutputDir] = useState('')
 
@@ -45,6 +46,9 @@ export default function SiteForm() {
       if (site.git_repo) {
         setUseGitDeploy(true)
         setGitRepo(site.git_repo)
+        setGitBranch(site.git_branch || '')
+        setBuildCmd(site.build_cmd || '')
+        setOutputDir(site.output_dir || '')
       }
     } catch {
       setError('Site yüklenemedi')
@@ -69,8 +73,14 @@ export default function SiteForm() {
       // Attach git deploy fields
       if (useGitDeploy && gitRepo && siteType !== 'pocketbase') {
         body.git_repo = gitRepo
-        if (buildCmd) body.build_cmd = buildCmd
-        if (outputDir) body.output_dir = outputDir
+        body.git_branch = gitBranch
+        body.build_cmd = buildCmd
+        body.output_dir = outputDir
+      } else {
+        body.git_repo = ''
+        body.git_branch = ''
+        body.build_cmd = ''
+        body.output_dir = ''
       }
 
       if (isEdit) {
@@ -276,7 +286,17 @@ export default function SiteForm() {
                   <p className="text-xs text-gray-400 mt-1">Sadece public repolar desteklenmektedir.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                    <input
+                      type="text"
+                      value={gitBranch}
+                      onChange={(e) => setGitBranch(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      placeholder="main"
+                    />
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Build Komutu</label>
                     <input
@@ -284,7 +304,7 @@ export default function SiteForm() {
                       value={buildCmd}
                       onChange={(e) => setBuildCmd(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                      placeholder="Otomatik (npm run build)"
+                      placeholder="Otomatik"
                     />
                   </div>
                   <div>
@@ -294,7 +314,7 @@ export default function SiteForm() {
                       value={outputDir}
                       onChange={(e) => setOutputDir(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                      placeholder="Otomatik (dist)"
+                      placeholder="Otomatik"
                     />
                   </div>
                 </div>

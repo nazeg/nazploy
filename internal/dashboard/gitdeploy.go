@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pocketbase/pocketbase/core"
 )
 
 // ── Framework Detection ──
@@ -92,98 +95,163 @@ func DetectFramework(projectDir string) FrameworkInfo {
 // ── Clone & Build ──
 
 // CloneAndBuild clones a GitHub repo, detects the framework, builds it,
-// and copies the build output into targetDir (the site's web root).
-// buildCmdOverride and outputDirOverride let the user override auto-detection.
-func CloneAndBuild(repo, buildCmdOverride, outputDirOverride, targetDir string) error {
-	// Create temp directory for cloning
-	tmpDir, err := os.MkdirTemp("", "nazploy-git-*")
+// and copies the build output into the site's web root.
+// It logs build details to the site's git_log and updates git_status.
+func CloneAndBuild(app core.App, siteID string) error {
+	record, err := app.FindRecordById("sites", siteID)
 	if err != nil {
-		return fmt.Errorf("geçici dizin oluşturulamadı: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	cloneDir := filepath.Join(tmpDir, "repo")
-
-	// Clone (shallow, main branch only)
-	log.Printf("[GitDeploy] Klonlanıyor: %s", repo)
-	cmd := exec.Command("git", "clone", "--depth", "1", repo, cloneDir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git clone başarısız: %w", err)
+		return fmt.Errorf("site kaydı bulunamadı: %w", err)
 	}
 
-	// Detect framework
-	framework := DetectFramework(cloneDir)
-	log.Printf("[GitDeploy] Framework tespit edildi: %s (build: %s, output: %s)", framework.Name, framework.BuildCmd, framework.OutputDir)
+	repo := record.GetString("git_repo")
+	branch := record.GetString("git_branch")
+	buildCmdOverride := record.GetString("build_cmd")
+	outputDirOverride := record.GetString("output_dir")
+	targetDir := record.GetString("root_dir")
 
-	buildCmd := framework.BuildCmd
-	outputDir := framework.OutputDir
-	if buildCmdOverride != "" {
-		buildCmd = buildCmdOverride
-	}
-	if outputDirOverride != "" {
-		outputDir = outputDirOverride
+	if repo == "" {
+		return fmt.Errorf("siteye tanımlı bir git deposu bulunmuyor")
 	}
 
-	// Check if package.json exists (it's a Node.js project)
-	pkgPath := filepath.Join(cloneDir, "package.json")
-	if _, err := os.Stat(pkgPath); err == nil {
-		// Install dependencies
-		log.Printf("[GitDeploy] npm install çalıştırılıyor...")
-		installCmd := exec.Command("npm", "install", "--prefer-offline", "--no-audit", "--no-fund")
-		installCmd.Dir = cloneDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		if err := installCmd.Run(); err != nil {
-			return fmt.Errorf("npm install başarısız: %w", err)
-		}
-
-		// Run build
-		log.Printf("[GitDeploy] Build çalıştırılıyor: %s", buildCmd)
-		parts := strings.Fields(buildCmd)
-		buildExec := exec.Command(parts[0], parts[1:]...)
-		buildExec.Dir = cloneDir
-		buildExec.Stdout = os.Stdout
-		buildExec.Stderr = os.Stderr
-
-		// For Next.js static export, set output: 'export' env hint
-		if framework.Name == "nextjs" {
-			buildExec.Env = append(os.Environ(), "NEXT_OUTPUT=export")
-		}
-
-		if err := buildExec.Run(); err != nil {
-			return fmt.Errorf("build başarısız (%s): %w", buildCmd, err)
-		}
-	} else {
-		// Not a Node.js project — just copy everything as static files
-		log.Printf("[GitDeploy] package.json bulunamadı, statik dosya olarak kopyalanıyor...")
-		outputDir = "."
+	var logBuf bytes.Buffer
+	logWrite := func(format string, args ...interface{}) {
+		msg := fmt.Sprintf(format, args...)
+		log.Printf("[GitDeploy] %s", msg)
+		logBuf.WriteString(msg + "\n")
 	}
 
-	// Determine source directory
-	srcDir := filepath.Join(cloneDir, outputDir)
-	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-		// Fallback: if output dir doesn't exist, copy the whole repo
-		log.Printf("[GitDeploy] Output dizini '%s' bulunamadı, tüm repo kopyalanıyor...", outputDir)
-		srcDir = cloneDir
-	}
-
-	// Clear existing content in target dir (but keep the dir itself)
-	entries, err := os.ReadDir(targetDir)
-	if err == nil {
-		for _, entry := range entries {
-			os.RemoveAll(filepath.Join(targetDir, entry.Name()))
+	updateSiteStatus := func(status string, logs string) {
+		rec, err := app.FindRecordById("sites", siteID)
+		if err == nil {
+			rec.Set("git_status", status)
+			rec.Set("git_log", logs)
+			_ = app.Save(rec)
 		}
 	}
 
-	// Copy build output to target directory
-	log.Printf("[GitDeploy] Build çıktısı kopyalanıyor: %s → %s", srcDir, targetDir)
-	if err := copyDir(srcDir, targetDir); err != nil {
-		return fmt.Errorf("dosya kopyalama başarısız: %w", err)
+	// Set status to deploying
+	logWrite("Deploy işlemi başlatıldı. Site: %s (%s)", record.GetString("name"), record.GetString("domain"))
+	updateSiteStatus("deploying", logBuf.String())
+
+	// Run main build logic inside a wrapper to handle error and log writing
+	runBuild := func() error {
+		// Create temp directory for cloning
+		tmpDir, err := os.MkdirTemp("", "nazploy-git-*")
+		if err != nil {
+			return fmt.Errorf("geçici dizin oluşturulamadı: %w", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		cloneDir := filepath.Join(tmpDir, "repo")
+
+		// Clone (shallow, specific branch if provided)
+		logWrite("Klonlanıyor: %s (Branch: %s)...", repo, func() string {
+			if branch != "" {
+				return branch
+			}
+			return "varsayılan"
+		}())
+
+		args := []string{"clone", "--depth", "1"}
+		if branch != "" {
+			args = append(args, "--branch", branch)
+		}
+		args = append(args, repo, cloneDir)
+
+		cmd := exec.Command("git", args...)
+		cmd.Stdout = io.MultiWriter(os.Stdout, &logBuf)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &logBuf)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("git clone başarısız: %w", err)
+		}
+
+		// Detect framework
+		framework := DetectFramework(cloneDir)
+		logWrite("Framework tespit edildi: %s (Önerilen build: %s, output: %s)", framework.Name, framework.BuildCmd, framework.OutputDir)
+
+		buildCmd := framework.BuildCmd
+		outputDir := framework.OutputDir
+		if buildCmdOverride != "" {
+			buildCmd = buildCmdOverride
+			logWrite("Kullanıcı build komutu override: %s", buildCmd)
+		}
+		if outputDirOverride != "" {
+			outputDir = outputDirOverride
+			logWrite("Kullanıcı output dizini override: %s", outputDir)
+		}
+
+		// Check if package.json exists (it's a Node.js project)
+		pkgPath := filepath.Join(cloneDir, "package.json")
+		if _, err := os.Stat(pkgPath); err == nil {
+			// Install dependencies
+			logWrite("npm install çalıştırılıyor...")
+			installCmd := exec.Command("npm", "install", "--prefer-offline", "--no-audit", "--no-fund")
+			installCmd.Dir = cloneDir
+			installCmd.Stdout = io.MultiWriter(os.Stdout, &logBuf)
+			installCmd.Stderr = io.MultiWriter(os.Stderr, &logBuf)
+			if err := installCmd.Run(); err != nil {
+				return fmt.Errorf("npm install başarısız: %w", err)
+			}
+
+			// Run build
+			logWrite("Build çalıştırılıyor: %s...", buildCmd)
+			parts := strings.Fields(buildCmd)
+			if len(parts) == 0 {
+				return fmt.Errorf("geçersiz build komutu")
+			}
+			buildExec := exec.Command(parts[0], parts[1:]...)
+			buildExec.Dir = cloneDir
+			buildExec.Stdout = io.MultiWriter(os.Stdout, &logBuf)
+			buildExec.Stderr = io.MultiWriter(os.Stderr, &logBuf)
+
+			// For Next.js static export, set output: 'export' env hint
+			if framework.Name == "nextjs" {
+				buildExec.Env = append(os.Environ(), "NEXT_OUTPUT=export")
+			}
+
+			if err := buildExec.Run(); err != nil {
+				return fmt.Errorf("build başarısız (%s): %w", buildCmd, err)
+			}
+		} else {
+			// Not a Node.js project — just copy everything as static files
+			logWrite("package.json bulunamadı, statik dosya olarak kopyalanıyor...")
+			outputDir = "."
+		}
+
+		// Determine source directory
+		srcDir := filepath.Join(cloneDir, outputDir)
+		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+			// Fallback: if output dir doesn't exist, copy the whole repo
+			logWrite("Output dizini '%s' bulunamadı, tüm repo kopyalanıyor...", outputDir)
+			srcDir = cloneDir
+		}
+
+		// Clear existing content in target dir (but keep the dir itself)
+		logWrite("Hedef dizin temizleniyor: %s", targetDir)
+		entries, err := os.ReadDir(targetDir)
+		if err == nil {
+			for _, entry := range entries {
+				os.RemoveAll(filepath.Join(targetDir, entry.Name()))
+			}
+		}
+
+		// Copy build output to target directory
+		logWrite("Build çıktısı kopyalanıyor: %s → %s", srcDir, targetDir)
+		if err := copyDir(srcDir, targetDir); err != nil {
+			return fmt.Errorf("dosya kopyalama başarısız: %w", err)
+		}
+
+		logWrite("Deploy başarıyla tamamlandı!")
+		return nil
 	}
 
-	log.Printf("[GitDeploy] Deploy tamamlandı: %s", repo)
+	if err := runBuild(); err != nil {
+		logWrite("Hata: %v", err)
+		updateSiteStatus("failed", logBuf.String())
+		return err
+	}
+
+	updateSiteStatus("ready", logBuf.String())
 	return nil
 }
 

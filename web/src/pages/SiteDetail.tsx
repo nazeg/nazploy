@@ -22,7 +22,7 @@ export default function SiteDetail() {
   const [gitDeploying, setGitDeploying] = useState(false)
 
   // Logs state
-  const [logType, setLogType] = useState<'nginx_access' | 'nginx_error' | 'service' | 'ssl'>('nginx_access')
+  const [logType, setLogType] = useState<'nginx_access' | 'nginx_error' | 'service' | 'ssl' | 'git_build'>('nginx_access')
   const [logs, setLogs] = useState('')
   const [logsLoading, setLogsLoading] = useState(false)
   const [liveLogs, setLiveLogs] = useState(false)
@@ -75,6 +75,27 @@ export default function SiteDetail() {
     loadSite()
     loadDatabases()
   }, [id])
+
+  // Set default log type to git_build if git repo exists
+  useEffect(() => {
+    if (site?.git_repo) {
+      setLogType('git_build')
+    }
+  }, [site?.id])
+
+  // Polling during Git deployment
+  useEffect(() => {
+    if (!site || site.git_status !== 'deploying') return
+
+    const interval = setInterval(() => {
+      loadSite()
+      if (logType === 'git_build') {
+        loadLogs()
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [site?.git_status, logType])
 
   async function loadSite() {
     try {
@@ -135,6 +156,7 @@ export default function SiteDetail() {
     try {
       await pb.send(`/api/dashboard/sites/${id}/git-deploy`, { method: 'POST' })
       alert('GitHub deploy başlatıldı! Arka planda klonlanıp build ediliyor.')
+      loadSite()
     } catch (err: any) {
       alert('GitHub deploy başarısız: ' + (err?.message || ''))
     } finally {
@@ -206,7 +228,7 @@ export default function SiteDetail() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <Link to="/sites" className="text-gray-400 hover:text-gray-600">&larr; Siteler</Link>
         <h1 className="text-2xl font-bold">{site.name}</h1>
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -214,6 +236,24 @@ export default function SiteDetail() {
         }`}>
           {site.status === 'active' ? 'Aktif' : 'Duraklatıldı'}
         </span>
+        {site.git_repo && (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            site.git_status === 'ready' ? 'bg-green-100 text-green-800 border border-green-200' :
+            site.git_status === 'deploying' ? 'bg-blue-100 text-blue-800 border border-blue-200 animate-pulse' :
+            site.git_status === 'failed' ? 'bg-red-100 text-red-800 border border-red-200' :
+            'bg-gray-100 text-gray-700 border border-gray-200'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+              site.git_status === 'ready' ? 'bg-green-500' :
+              site.git_status === 'deploying' ? 'bg-blue-500 animate-ping' :
+              site.git_status === 'failed' ? 'bg-red-500' :
+              'bg-gray-400'
+            }`} />
+            {site.git_status === 'ready' ? 'Build Başarılı' :
+             site.git_status === 'deploying' ? 'Build Ediliyor...' :
+             site.git_status === 'failed' ? 'Build Hatalı' : 'Bekliyor'}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -281,24 +321,70 @@ export default function SiteDetail() {
                 </div>
               )}
               {site.git_repo && (
-                <div className="col-span-2">
-                  <dt className="text-gray-500 flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                    GitHub Repo
-                  </dt>
-                  <dd className="font-mono text-xs mt-1">
-                    <a
-                      href={site.git_repo}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
-                    >
-                      {site.git_repo}
-                    </a>
-                  </dd>
-                </div>
+                <>
+                  <div className="col-span-2 border-t border-gray-100 pt-4 mt-2">
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                      </svg>
+                      Git & Webhook Ayarları
+                    </h3>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Repository</dt>
+                    <dd className="font-mono text-xs mt-1 font-medium">
+                      <a
+                        href={site.git_repo}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                        id="git-repo-link"
+                      >
+                        {site.git_repo.replace('https://github.com/', '')}
+                      </a>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Hedef Branch</dt>
+                    <dd className="font-mono text-xs mt-1 font-semibold">{site.git_branch || 'main'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Build Komutu</dt>
+                    <dd className="font-mono text-xs mt-1 bg-gray-50 p-1 rounded border inline-block max-w-full overflow-x-auto">
+                      {site.build_cmd || '(Varsayılan)'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Çıktı Dizini (Output Dir)</dt>
+                    <dd className="font-mono text-xs mt-1 bg-gray-50 p-1 rounded border inline-block max-w-full overflow-x-auto">
+                      {site.output_dir || '(Varsayılan)'}
+                    </dd>
+                  </div>
+                  <div className="col-span-2 mt-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <dt className="text-gray-600 font-medium text-xs flex items-center justify-between">
+                      <span>GitHub Webhook URL</span>
+                      <button
+                        type="button"
+                        id="copy-webhook-btn"
+                        onClick={() => {
+                          const url = `${window.location.origin}/api/public/webhooks/github/${site.id}`;
+                          navigator.clipboard.writeText(url)
+                            .then(() => alert('Webhook URL kopyalandı! GitHub repo ayarlarından Webhook ekleyip bu adresi Payload URL olarak tanımlayabilirsiniz. (Content type: application/json)'))
+                            .catch(() => alert('Kopyalama başarısız, lütfen manuel kopyalayın.'));
+                        }}
+                        className="text-blue-600 hover:text-blue-700 font-semibold"
+                      >
+                        Kopyala
+                      </button>
+                    </dt>
+                    <dd className="font-mono text-[10px] text-gray-500 break-all select-all mt-1 p-1 bg-white border border-gray-200 rounded">
+                      {`${window.location.origin}/api/public/webhooks/github/${site.id}`}
+                    </dd>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      GitHub &gt; Settings &gt; Webhooks &gt; Add Webhook adımlarını takip ederek Payload URL kısmına yapıştırın. Content type'ı <strong>application/json</strong> seçin.
+                    </p>
+                  </div>
+                </>
               )}
             </dl>
           </div>
@@ -454,7 +540,7 @@ export default function SiteDetail() {
                   />
                   Canlı Akış
                 </label>
-                {logType !== 'service' && (
+                {logType !== 'service' && logType !== 'git_build' && (
                   <button
                     onClick={clearLogs}
                     className="text-xs text-red-600 hover:underline"
@@ -473,6 +559,18 @@ export default function SiteDetail() {
             </div>
 
             <div className="flex border-b border-gray-200 mb-4 overflow-x-auto">
+              {site.git_repo && (
+                <button
+                  onClick={() => setLogType('git_build')}
+                  className={`py-2 px-4 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
+                    logType === 'git_build'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Git Build Logları
+                </button>
+              )}
               <button
                 onClick={() => setLogType('nginx_access')}
                 className={`py-2 px-4 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${

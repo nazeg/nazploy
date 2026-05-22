@@ -113,6 +113,11 @@ func main() {
 			return dashboard.HandleStats(e, app)
 		})
 
+		// Public Webhook (unauthenticated)
+		se.Router.POST("/api/public/webhooks/github/{id}", func(e *core.RequestEvent) error {
+			return dashboard.HandleGithubWebhook(e, app, ngx)
+		})
+
 		// ── Frontend SPA ──
 		distFS, err := fs.Sub(frontendFS, "web/dist")
 		if err != nil {

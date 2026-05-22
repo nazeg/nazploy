@@ -28,8 +28,16 @@ func HandleGetSiteLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error {
 		logType = "nginx_access"
 	}
 
-	if logType != "nginx_access" && logType != "nginx_error" && logType != "service" && logType != "ssl" {
+	if logType != "nginx_access" && logType != "nginx_error" && logType != "service" && logType != "ssl" && logType != "git_build" {
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid log type"})
+	}
+
+	if logType == "git_build" {
+		logs := site.GetString("git_log")
+		if logs == "" {
+			logs = "Henüz herhangi bir git build log kaydı bulunmuyor."
+		}
+		return e.JSON(http.StatusOK, map[string]string{"logs": logs})
 	}
 
 	if runtime.GOOS == "windows" {

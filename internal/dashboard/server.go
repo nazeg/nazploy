@@ -71,6 +71,10 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	record.Set("notes", req.Notes)
 	if req.GitRepo != "" {
 		record.Set("git_repo", req.GitRepo)
+		record.Set("git_branch", req.GitBranch)
+		record.Set("build_cmd", req.BuildCmd)
+		record.Set("output_dir", req.OutputDir)
+		record.Set("git_status", "idle")
 	}
 
 	// Create web root (site name slug + record ID)
@@ -150,7 +154,7 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	// If git_repo is provided, clone and build in background
 	if req.GitRepo != "" {
 		go func() {
-			if err := CloneAndBuild(req.GitRepo, req.BuildCmd, req.OutputDir, rootDir); err != nil {
+			if err := CloneAndBuild(app, record.Id); err != nil {
 				log.Printf("[GitDeploy] Hata (site: %s): %v", record.Id, err)
 			} else {
 				ngx.Reload() // reload nginx after files are in place
@@ -213,6 +217,24 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	}
 	if req.Notes != nil {
 		record.Set("notes", *req.Notes)
+	}
+	if req.GitRepo != nil {
+		record.Set("git_repo", *req.GitRepo)
+	}
+	if req.GitBranch != nil {
+		record.Set("git_branch", *req.GitBranch)
+	}
+	if req.BuildCmd != nil {
+		record.Set("build_cmd", *req.BuildCmd)
+	}
+	if req.OutputDir != nil {
+		record.Set("output_dir", *req.OutputDir)
+	}
+	if req.GitStatus != nil {
+		record.Set("git_status", *req.GitStatus)
+	}
+	if req.GitLog != nil {
+		record.Set("git_log", *req.GitLog)
 	}
 
 	if err := app.Save(record); err != nil {
@@ -393,15 +415,21 @@ func HandleGitDeploy(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Pasif durumdaki siteler deploy edilemez."})
 	}
 
-	rootDir := record.GetString("root_dir")
-
-	// Parse optional overrides from request body
+	// Parse optional overrides from request body and save them
 	var req GitDeployRequest
-	e.BindBody(&req) // ignore error, fields are optional
+	if err := e.BindBody(&req); err == nil {
+		if req.BuildCmd != "" {
+			record.Set("build_cmd", req.BuildCmd)
+		}
+		if req.OutputDir != "" {
+			record.Set("output_dir", req.OutputDir)
+		}
+		_ = app.Save(record)
+	}
 
 	// Run clone & build in background
 	go func() {
-		if err := CloneAndBuild(gitRepo, req.BuildCmd, req.OutputDir, rootDir); err != nil {
+		if err := CloneAndBuild(app, record.Id); err != nil {
 			log.Printf("[GitDeploy] Hata (site: %s): %v", record.Id, err)
 		} else {
 			ngx.Reload()
@@ -410,6 +438,59 @@ func HandleGitDeploy(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 	}()
 
 	return e.JSON(http.StatusOK, map[string]string{"message": "GitHub deploy başlatıldı. Arka planda çalışıyor."})
+}
+
+func HandleGithubWebhook(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *NginxManager) error {
+	record, err := app.FindRecordById("sites", e.Request.PathValue("id"))
+	if err != nil {
+		return e.JSON(http.StatusNotFound, map[string]string{"error": "site not found"})
+	}
+
+	gitRepo := record.GetString("git_repo")
+	if gitRepo == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Bu site bir GitHub reposuna bağlı değil."})
+	}
+
+	if record.GetString("status") == SiteStatusPaused {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Pasif durumdaki siteler deploy edilemez."})
+	}
+
+	// Read GitHub event type
+	event := e.Request.Header.Get("X-GitHub-Event")
+	if event != "" && event != "push" {
+		// Return 200 for other events like ping to allow webhook confirmation
+		return e.JSON(http.StatusOK, map[string]string{"message": "Event ignored"})
+	}
+
+	// Read push branch ref from body
+	type GitHubPayload struct {
+		Ref string `json:"ref"` // refs/heads/branch_name
+	}
+
+	var payload GitHubPayload
+	if err := e.BindBody(&payload); err == nil && payload.Ref != "" {
+		branch := record.GetString("git_branch")
+		if branch == "" {
+			branch = "main" // default to main
+		}
+
+		expectedRef := "refs/heads/" + branch
+		if payload.Ref != expectedRef {
+			return e.JSON(http.StatusOK, map[string]string{"message": fmt.Sprintf("Push on branch %s ignored. Configured branch is %s", payload.Ref, branch)})
+		}
+	}
+
+	// Trigger build in background
+	go func() {
+		if err := CloneAndBuild(app, record.Id); err != nil {
+			log.Printf("[Webhook GitDeploy] Hata (site: %s): %v", record.Id, err)
+		} else {
+			ngx.Reload()
+			log.Printf("[Webhook GitDeploy] Başarılı (site: %s)", record.Id)
+		}
+	}()
+
+	return e.JSON(http.StatusOK, map[string]string{"message": "GitHub Webhook deploy tetiklendi."})
 }
 
 // ── SSL ──

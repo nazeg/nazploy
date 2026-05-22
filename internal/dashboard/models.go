@@ -48,6 +48,11 @@ type Site struct {
 	SSLExpiry     string `json:"ssl_expiry,omitempty"`
 	Status        string `json:"status"`
 	GitRepo       string `json:"git_repo,omitempty"`
+	GitBranch     string `json:"git_branch,omitempty"`
+	BuildCmd      string `json:"build_cmd,omitempty"`
+	OutputDir     string `json:"output_dir,omitempty"`
+	GitStatus     string `json:"git_status,omitempty"`
+	GitLog        string `json:"git_log,omitempty"`
 	Notes         string `json:"notes,omitempty"`
 	Created       string `json:"created"`
 	Updated       string `json:"updated"`
@@ -76,6 +81,7 @@ type CreateSiteRequest struct {
 	ProxyURL   string `json:"proxy_url,omitempty"`
 	AdminEmail string `json:"admin_email,omitempty"`
 	GitRepo    string `json:"git_repo,omitempty"`
+	GitBranch  string `json:"git_branch,omitempty"`
 	BuildCmd   string `json:"build_cmd,omitempty"`
 	OutputDir  string `json:"output_dir,omitempty"`
 	Notes      string `json:"notes,omitempty"`
@@ -95,6 +101,12 @@ type UpdateSiteRequest struct {
 	AdminEmail    *string `json:"admin_email,omitempty"`
 	AdminPassword *string `json:"admin_password,omitempty"`
 	Status        *string `json:"status,omitempty"`
+	GitRepo       *string `json:"git_repo,omitempty"`
+	GitBranch     *string `json:"git_branch,omitempty"`
+	BuildCmd      *string `json:"build_cmd,omitempty"`
+	OutputDir     *string `json:"output_dir,omitempty"`
+	GitStatus     *string `json:"git_status,omitempty"`
+	GitLog        *string `json:"git_log,omitempty"`
 	Notes         *string `json:"notes,omitempty"`
 }
 
