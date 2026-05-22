@@ -71,7 +71,7 @@ export default function SiteForm() {
       }
 
       // Attach git deploy fields
-      if (useGitDeploy && gitRepo && siteType !== 'pocketbase') {
+      if (useGitDeploy && gitRepo && siteType !== 'proxy') {
         body.git_repo = gitRepo
         body.git_branch = gitBranch
         body.build_cmd = buildCmd
@@ -235,7 +235,7 @@ export default function SiteForm() {
         )}
 
         {/* ── GitHub Deploy Section ── */}
-        {siteType !== 'pocketbase' && (
+        {siteType !== 'proxy' && (
           <div className="border border-gray-200 rounded-xl overflow-hidden transition-all">
             <button
               type="button"
