@@ -9,9 +9,7 @@ export default function SiteForm() {
   const isEdit = !!id
 
   const [name, setName] = useState('')
-  const [domain, setDomain] = useState(() => {
-    return !id ? window.location.hostname : ''
-  })
+  const [domain, setDomain] = useState('')
   const [port, setPort] = useState<number | ''>('')
   const [siteType, setSiteType] = useState<'static' | 'proxy' | 'pocketbase'>('static')
   const [proxyUrl, setProxyUrl] = useState('')
