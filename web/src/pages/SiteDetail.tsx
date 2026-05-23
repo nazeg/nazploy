@@ -433,7 +433,7 @@ export default function SiteDetail() {
 
 
           {/* Databases Card */}
-          {site.site_type !== 'pocketbase' && (
+          {site.site_type !== 'pocketbase' && site.site_type !== 'static' && (
             <div className="bg-white rounded-xl shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold">Veritabanları</h2>
