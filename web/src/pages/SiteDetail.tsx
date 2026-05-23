@@ -145,15 +145,6 @@ export default function SiteDetail() {
     }
   }
 
-  async function deploy() {
-    try {
-      await pb.send(`/api/dashboard/sites/${id}/deploy`, { method: 'POST' })
-      alert('Site başarıyla deploy edildi!')
-    } catch (err: any) {
-      alert('Deploy başarısız: ' + (err?.message || ''))
-    }
-  }
-
   async function gitDeploy() {
     if (!site?.git_repo) return
     setGitDeploying(true)
@@ -701,13 +692,6 @@ export default function SiteDetail() {
                 }`}
               >
                 {site.status === 'active' ? 'Siteyi Durdur (Pasif Yap)' : 'Siteyi Başlat (Aktif Yap)'}
-              </button>
-              <button
-                onClick={deploy}
-                disabled={site.status === 'paused'}
-                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Deploy Et (Nginx Reload)
               </button>
               {site.git_repo && (
                 <button
