@@ -387,7 +387,7 @@ export default function Settings() {
                     <input type="hidden" name="manifest" value={manifestString} />
                     <button
                       type="submit"
-                      disabled={githubLoading}
+                      disabled={githubLoading || !githubState}
                       className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 px-5 text-xs font-bold transition-all shadow-sm shadow-blue-500/10 flex items-center gap-2"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

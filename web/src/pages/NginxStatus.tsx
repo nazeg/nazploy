@@ -4,8 +4,6 @@ import {
   Server,
   RefreshCw,
   Terminal,
-  CheckCircle2,
-  AlertCircle,
   Copy,
   Check,
   FileText,

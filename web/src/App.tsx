@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import pb from './lib/pocketbase'
 import LoginPage from './pages/LoginPage'
 import DashboardOverview from './pages/DashboardOverview'
@@ -13,7 +13,6 @@ import Settings from './pages/Settings'
 function App() {
   const [authenticated, setAuthenticated] = useState(pb.authStore.isValid)
   const navigate = useNavigate()
-  const location = useLocation()
 
   useEffect(() => {
     const unsubscribe = pb.authStore.onChange((token) => {

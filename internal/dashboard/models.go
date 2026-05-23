@@ -1,6 +1,6 @@
 package dashboard
 
-import "time"
+
 
 // ── Constants ──
 
@@ -25,11 +25,8 @@ const (
 
 	NginxSitesAvailable = "/etc/nginx/sites-available"
 	NginxSitesEnabled   = "/etc/nginx/sites-enabled"
-	NginxDir            = "/etc/nginx"
 
 	WebRootDir = "/var/www"
-
-	DefaultAdminPort = 8090
 )
 
 // ── Models (mirrors Pocketbase collections) ──
@@ -125,14 +122,13 @@ type StatsResponse struct {
 }
 
 type NginxConfigInput struct {
-	Domain     string
-	Port       int
-	RootDir    string
-	SiteType   string
-	ProxyURL   string
-	SSLEntry   *SSLEntry
-	ConfigPath string
-	SiteID     string
+	Domain   string
+	Port     int
+	RootDir  string
+	SiteType string
+	ProxyURL string
+	SSLEntry *SSLEntry
+	SiteID   string
 }
 
 type SSLEntry struct {
@@ -141,7 +137,3 @@ type SSLEntry struct {
 }
 
 // utils
-
-func Now() string {
-	return time.Now().UTC().Format(time.RFC3339)
-}

@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import pb from '../lib/pocketbase'
 import type { Site, Database, CreateDatabaseRequest } from '../types'
-import { Play, Pause, Trash2, RefreshCw } from 'lucide-react'
+import { Trash2, RefreshCw } from 'lucide-react'
 
 export default function SiteDetail() {
   const { id } = useParams()
-  const navigate = useNavigate()
 
   const [site, setSite] = useState<Site | null>(null)
   const [databases, setDatabases] = useState<Database[]>([])
