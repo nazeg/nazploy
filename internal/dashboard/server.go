@@ -1,8 +1,13 @@
 package dashboard
 
 import (
+	"bytes"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -43,6 +48,11 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	var port int
 	var err error
 	if req.Port != 0 {
+		if req.Port < PortRangeStart || req.Port > PortRangeEnd {
+			return e.JSON(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("port must be between %d and %d", PortRangeStart, PortRangeEnd),
+			})
+		}
 		port = req.Port
 	} else {
 		port, err = pm.Next(app)
@@ -492,6 +502,30 @@ func HandleGithubWebhook(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Pasif durumdaki siteler deploy edilemez."})
 	}
 
+	// Verify webhook secret (HMAC-SHA256 signature)
+	secret := record.GetString("webhook_secret")
+	if secret != "" {
+		sigHeader := e.Request.Header.Get("X-Hub-Signature-256")
+		if sigHeader == "" {
+			return e.JSON(http.StatusUnauthorized, map[string]string{"error": "missing signature"})
+		}
+
+		body, err := io.ReadAll(e.Request.Body)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read body"})
+		}
+		// Re-set body so BindBody can read it again
+		e.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(body)
+		expectedSig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+		if !hmac.Equal([]byte(expectedSig), []byte(sigHeader)) {
+			return e.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid signature"})
+		}
+	}
+
 	// Read GitHub event type
 	event := e.Request.Header.Get("X-GitHub-Event")
 	if event != "" && event != "push" {
@@ -505,16 +539,17 @@ func HandleGithubWebhook(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *
 	}
 
 	var payload GitHubPayload
-	if err := e.BindBody(&payload); err == nil && payload.Ref != "" {
-		branch := record.GetString("git_branch")
-		if branch == "" {
-			branch = "main" // default to main
-		}
+	if err := e.BindBody(&payload); err != nil {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid body"})
+	}
+	branch := record.GetString("git_branch")
+	if branch == "" {
+		branch = "main" // default to main
+	}
 
-		expectedRef := "refs/heads/" + branch
-		if payload.Ref != expectedRef {
-			return e.JSON(http.StatusOK, map[string]string{"message": fmt.Sprintf("Push on branch %s ignored. Configured branch is %s", payload.Ref, branch)})
-		}
+	expectedRef := "refs/heads/" + branch
+	if payload.Ref != expectedRef {
+		return e.JSON(http.StatusOK, map[string]string{"message": fmt.Sprintf("Push on branch %s ignored. Configured branch is %s", payload.Ref, branch)})
 	}
 
 	// Trigger build in background
@@ -556,8 +591,11 @@ func HandleEnableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 	go func() {
 		result, err := ssl.IssueCertificate(domain, record.GetInt("port"))
 		if err != nil {
-			record.Set("ssl_status", SSLStatusError)
-			app.Save(record)
+			// Re-fetch to avoid stale record
+			if rec, fetchErr := app.FindRecordById("sites", record.Id); fetchErr == nil {
+				rec.Set("ssl_status", SSLStatusError)
+				app.Save(rec)
+			}
 
 			// Hata detayını log dosyasına yaz
 			errMsg := fmt.Sprintf("[%s] SSL Kurulumu Başarısız Oldu:\n%v\n", time.Now().Format("2006-01-02 15:04:05"), err)
@@ -565,9 +603,15 @@ func HandleEnableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 			return
 		}
 
-		record.Set("ssl_status", SSLStatusActive)
-		record.Set("ssl_expiry", result.Expiry)
-		app.Save(record)
+		// Re-fetch to avoid overwriting concurrent changes
+		rec, fetchErr := app.FindRecordById("sites", record.Id)
+		if fetchErr != nil {
+			return
+		}
+
+		rec.Set("ssl_status", SSLStatusActive)
+		rec.Set("ssl_expiry", result.Expiry)
+		app.Save(rec)
 
 		// Başarı mesajını log dosyasına yaz
 		successMsg := fmt.Sprintf("[%s] SSL Sertifikası Başarıyla Kuruldu!\nSertifika Yolu: %s\nGeçerlilik: %s\n", time.Now().Format("2006-01-02 15:04:05"), result.CertPath, result.Expiry)
@@ -576,19 +620,19 @@ func HandleEnableSSL(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngin
 		// Regenerate Nginx config with SSL
 		config, err := ngx.GenerateConfig(NginxConfigInput{
 			Domain:   domain,
-			Port:     record.GetInt("port"),
-			RootDir:  record.GetString("root_dir"),
-			SiteType: record.GetString("site_type"),
-			ProxyURL: record.GetString("proxy_url"),
+			Port:     rec.GetInt("port"),
+			RootDir:  rec.GetString("root_dir"),
+			SiteType: rec.GetString("site_type"),
+			ProxyURL: rec.GetString("proxy_url"),
 			SSLEntry: &SSLEntry{CertPath: result.CertPath, KeyPath: result.KeyPath},
-			SiteID:   record.Id,
+			SiteID:   rec.Id,
 		})
 		if err != nil {
 			return
 		}
 
 		ngx.RemoveConfig(domain)
-		ngx.WriteConfig(record.Id, config)
+		ngx.WriteConfig(rec.Id, config)
 		ngx.Reload()
 	}()
 
