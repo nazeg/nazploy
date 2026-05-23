@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import pb from '../lib/pocketbase'
 import type { Site, Database, CreateDatabaseRequest } from '../types'
+import { Play, Pause, Trash2, RefreshCw } from 'lucide-react'
 
 export default function SiteDetail() {
   const { id } = useParams()
@@ -25,7 +26,7 @@ export default function SiteDetail() {
   const [logType, setLogType] = useState<'nginx_access' | 'nginx_error' | 'service' | 'ssl' | 'git_build'>('nginx_access')
   const [logs, setLogs] = useState('')
   const [logsLoading, setLogsLoading] = useState(false)
-  const [liveLogs, setLiveLogs] = useState(false)
+  const [liveLogs, setLiveLogs] = useState(true)
 
   async function loadLogs() {
     if (!id) return
@@ -530,29 +531,45 @@ export default function SiteDetail() {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-700">Log İzleyici</h2>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={liveLogs}
-                    onChange={(e) => setLiveLogs(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
+              <div className="flex items-center gap-2">
+                {/* Canlı Akış Toggle Button */}
+                <button
+                  onClick={() => setLiveLogs(!liveLogs)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                    liveLogs
+                      ? 'bg-blue-50 text-blue-700 border-blue-100 shadow-sm shadow-blue-500/5'
+                      : 'bg-gray-50 text-gray-500 border-gray-200'
+                  }`}
+                >
+                  <span className="relative flex h-1.5 w-1.5">
+                    {liveLogs && (
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    )}
+                    <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
+                      liveLogs ? 'bg-blue-600' : 'bg-gray-400'
+                    }`}></span>
+                  </span>
                   Canlı Akış
-                </label>
+                </button>
+
+                {/* Temizle Button */}
                 {logType !== 'service' && logType !== 'git_build' && (
                   <button
                     onClick={clearLogs}
-                    className="text-xs text-red-600 hover:underline"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100 transition-colors"
                   >
+                    <Trash2 className="w-3.5 h-3.5" />
                     Temizle
                   </button>
                 )}
+
+                {/* Yenile Button */}
                 <button
                   onClick={loadLogs}
                   disabled={logsLoading}
-                  className="text-xs text-blue-600 hover:underline"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"
                 >
+                  <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin text-blue-600' : 'text-gray-500'}`} />
                   Yenile
                 </button>
               </div>
