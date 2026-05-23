@@ -135,7 +135,7 @@ export default function SiteForm() {
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder={`ör. example.com veya boş bırakın (${window.location.hostname})`}
+            placeholder="ör. example.com veya 10.2.42.87"
           />
           <p className="text-xs text-gray-400 mt-1">
             Sitenize ait domain adresi veya IP. Boş bırakırsanız sunucunun geçerli adresi ({window.location.hostname}) kullanılacaktır. (Not: IP adresleri için Let's Encrypt SSL desteklenmemektedir).
