@@ -41,8 +41,17 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
-	if req.Name == "" || req.Domain == "" {
-		return e.JSON(http.StatusBadRequest, map[string]string{"error": "name and domain are required"})
+	if req.Name == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "name is required"})
+	}
+
+	domain := strings.TrimSpace(req.Domain)
+	if domain == "" {
+		host := e.Request.Host
+		if idx := strings.Index(host, ":"); idx != -1 {
+			host = host[:idx]
+		}
+		domain = host
 	}
 
 	// Determine port (either manual or auto-allocated)
@@ -74,7 +83,7 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	record := core.NewRecord(collection)
 	record.Id = generateRandomID()
 	record.Set("name", req.Name)
-	record.Set("domain", req.Domain)
+	record.Set("domain", domain)
 	record.Set("port", port)
 	record.Set("site_type", req.SiteType)
 	record.Set("ssl_status", SSLStatusNone)
@@ -143,7 +152,7 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 
 	// Generate and write Nginx config
 	config, err := ngx.GenerateConfig(NginxConfigInput{
-		Domain:   req.Domain,
+		Domain:   domain,
 		Port:     port,
 		RootDir:  rootDir,
 		SiteType: req.SiteType,
@@ -155,7 +164,7 @@ func HandleCreateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	}
 
 	// Clean up old-style domain config if it exists
-	ngx.RemoveConfig(req.Domain)
+	ngx.RemoveConfig(domain)
 
 	if err := ngx.WriteConfig(record.Id, config); err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "nginx config write: " + err.Error()})
@@ -214,9 +223,19 @@ func HandleUpdateSite(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *Ngi
 	if req.Name != nil {
 		record.Set("name", *req.Name)
 	}
-	if req.Domain != nil && *req.Domain != oldDomain {
-		record.Set("domain", *req.Domain)
-		domainChanged = true
+	if req.Domain != nil {
+		newDomain := strings.TrimSpace(*req.Domain)
+		if newDomain == "" {
+			host := e.Request.Host
+			if idx := strings.Index(host, ":"); idx != -1 {
+				host = host[:idx]
+			}
+			newDomain = host
+		}
+		if newDomain != oldDomain {
+			record.Set("domain", newDomain)
+			domainChanged = true
+		}
 	}
 	if req.Port != nil {
 		record.Set("port", *req.Port)

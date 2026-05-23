@@ -63,7 +63,7 @@ export default function SiteForm() {
     try {
       const body: any = {
         name,
-        domain,
+        domain: domain.trim(),
         port: port ? Number(port) : undefined,
         site_type: siteType,
         proxy_url: siteType === 'proxy' ? proxyUrl : '',
@@ -129,17 +129,16 @@ export default function SiteForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Domain / IP</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Domain / IP (isteğe bağlı)</label>
           <input
             type="text"
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="ör. example.com veya 10.2.42.87"
-            required
+            placeholder={`ör. example.com veya boş bırakın (${window.location.hostname})`}
           />
           <p className="text-xs text-gray-400 mt-1">
-            Sitenize ait domain adresi veya IP. (Not: IP adresleri için Let's Encrypt SSL desteklenmemektedir).
+            Sitenize ait domain adresi veya IP. Boş bırakırsanız sunucunun geçerli adresi ({window.location.hostname}) kullanılacaktır. (Not: IP adresleri için Let's Encrypt SSL desteklenmemektedir).
           </p>
         </div>
 
