@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import pb from '../lib/pocketbase'
-import { LayoutDashboard, Globe, Server, LogOut, Terminal } from 'lucide-react'
+import { LayoutDashboard, Globe, Server, LogOut, Terminal, Settings } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/sites', label: 'Siteler', icon: Globe },
   { to: '/nginx', label: 'Nginx Durum', icon: Server },
+  { to: '/settings', label: 'Ayarlar', icon: Settings },
 ]
 
 export default function Sidebar() {

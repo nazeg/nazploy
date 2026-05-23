@@ -8,6 +8,7 @@ import SiteDetail from './pages/SiteDetail'
 import SiteForm from './pages/SiteForm'
 import Sidebar from './components/Sidebar'
 import NginxStatus from './pages/NginxStatus'
+import Settings from './pages/Settings'
 
 function App() {
   const [authenticated, setAuthenticated] = useState(pb.authStore.isValid)
@@ -43,6 +44,7 @@ function App() {
             <Route path="/sites/:id" element={<SiteDetail />} />
             <Route path="/sites/:id/edit" element={<SiteForm />} />
             <Route path="/nginx" element={<NginxStatus />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

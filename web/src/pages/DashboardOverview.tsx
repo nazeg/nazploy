@@ -24,44 +24,7 @@ export default function DashboardOverview() {
     }
   }
 
-  const [oldPassword, setOldPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordLoading, setPasswordLoading] = useState(false)
-  const [passwordSuccess, setPasswordSuccess] = useState('')
-  const [passwordError, setPasswordError] = useState('')
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setPasswordError('')
-    setPasswordSuccess('')
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Yeni şifreler eşleşmiyor.')
-      return
-    }
-
-    setPasswordLoading(true)
-    try {
-      const recordId = pb.authStore.model?.id
-      if (!recordId) throw new Error('Kullanıcı oturum bilgisi bulunamadı.')
-
-      await pb.collection('_superusers').update(recordId, {
-        oldPassword: oldPassword,
-        password: newPassword,
-        passwordConfirm: confirmPassword,
-      })
-
-      setPasswordSuccess('Şifreniz başarıyla güncellendi.')
-      setOldPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-    } catch (err: any) {
-      setPasswordError(err?.message || 'Şifre güncellenemedi. Lütfen mevcut şifrenizi kontrol edin.')
-    } finally {
-      setPasswordLoading(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -198,82 +161,27 @@ export default function DashboardOverview() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Nginx Status Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-gray-900">Nginx Durumu</h2>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                stats?.nginx_running
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                  : 'bg-rose-50 text-rose-700 border-rose-100'
-              }`}>
-                {stats?.nginx_running ? 'Çalışıyor' : 'Kapalı'}
-              </span>
-            </div>
-            <p className="text-sm text-gray-500 leading-relaxed">
-              {stats?.nginx_running
-                ? 'Nginx aktif ve sitelere hizmet veriyor. Sunucunuz üzerindeki tüm yönlendirmeler ve SSL sertifikaları aktif.'
-                : 'Nginx çalışmıyor. Lütfen Nginx servis durum sayfasını kontrol edin veya servisi yeniden başlatın.'}
-            </p>
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="font-bold text-gray-900">Nginx Durumu</h2>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+              stats?.nginx_running
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                : 'bg-rose-50 text-rose-700 border-rose-100'
+            }`}>
+              {stats?.nginx_running ? 'Çalışıyor' : 'Kapalı'}
+            </span>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-50">
-            <Link to="/nginx" className="text-xs font-bold text-blue-600 hover:text-blue-700">
-              Nginx Yönetimine Git &rarr;
-            </Link>
-          </div>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            {stats?.nginx_running
+              ? 'Nginx aktif ve sitelere hizmet veriyor. Tüm proxy yönlendirmeleri aktif.'
+              : 'Nginx çalışmıyor. Sitelerinize erişim sağlanamayabilir.'}
+          </p>
         </div>
-
-        {/* Change Admin Password Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h2 className="font-bold text-gray-900 mb-4">Yönetici Şifresini Değiştir</h2>
-          <form onSubmit={handlePasswordChange} className="space-y-3">
-            <div>
-              <input
-                type="password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                placeholder="Mevcut Şifre"
-                className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Yeni Şifre"
-                className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                required
-              />
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Yeni Şifre Tekrar"
-                className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                required
-              />
-            </div>
-
-            {passwordError && (
-              <p className="text-[11px] text-red-600 font-medium">{passwordError}</p>
-            )}
-            {passwordSuccess && (
-              <p className="text-[11px] text-emerald-600 font-medium">{passwordSuccess}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={passwordLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-sm shadow-blue-500/10"
-            >
-              {passwordLoading ? 'Şifre Güncelleniyor...' : 'Şifreyi Güncelle'}
-            </button>
-          </form>
-        </div>
+        <Link to="/nginx" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 shrink-0 justify-center">
+          Nginx Yönetimi &rarr;
+        </Link>
       </div>
     </div>
   )
