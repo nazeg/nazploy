@@ -95,6 +95,31 @@ func DetectFramework(projectDir string) FrameworkInfo {
 	}
 }
 
+// dbLogWriter writes build logs to a memory buffer and periodically updates PocketBase.
+type dbLogWriter struct {
+	app        core.App
+	siteID     string
+	logBuf     *bytes.Buffer
+	lastUpdate time.Time
+}
+
+func (w *dbLogWriter) Write(p []byte) (n int, err error) {
+	n, err = w.logBuf.Write(p)
+	// Write to server stdout for terminal logs
+	os.Stdout.Write(p)
+
+	// Update DB with intermediate logs, throttled to once every 1 second
+	if time.Since(w.lastUpdate) > 1000*time.Millisecond {
+		w.lastUpdate = time.Now()
+		rec, fetchErr := w.app.FindRecordById("sites", w.siteID)
+		if fetchErr == nil {
+			rec.Set("git_log", w.logBuf.String())
+			_ = w.app.Save(rec)
+		}
+	}
+	return
+}
+
 // ── Clone & Build ──
 
 // CloneAndBuild clones a GitHub repo, detects the framework, builds it,
@@ -156,10 +181,17 @@ func CloneAndBuild(app core.App, siteID string) error {
 	}
 
 	var logBuf bytes.Buffer
+	writer := &dbLogWriter{
+		app:        app,
+		siteID:     siteID,
+		logBuf:     &logBuf,
+		lastUpdate: time.Now(),
+	}
+
 	logWrite := func(format string, args ...interface{}) {
 		msg := fmt.Sprintf(format, args...)
 		log.Printf("[GitDeploy] %s", msg)
-		logBuf.WriteString(msg + "\n")
+		writer.Write([]byte(msg + "\n"))
 	}
 
 	updateSiteStatus := func(status string, logs string) {
@@ -202,8 +234,8 @@ func CloneAndBuild(app core.App, siteID string) error {
 
 		cmd := exec.Command("git", args...)
 		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		cmd.Stdout = io.MultiWriter(os.Stdout, &logBuf)
-		cmd.Stderr = io.MultiWriter(os.Stderr, &logBuf)
+		cmd.Stdout = writer
+		cmd.Stderr = writer
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("git clone başarısız: %w", err)
 		}
@@ -230,8 +262,8 @@ func CloneAndBuild(app core.App, siteID string) error {
 			logWrite("npm install çalıştırılıyor...")
 			installCmd := exec.Command("npm", "install", "--prefer-offline", "--no-audit", "--no-fund")
 			installCmd.Dir = cloneDir
-			installCmd.Stdout = io.MultiWriter(os.Stdout, &logBuf)
-			installCmd.Stderr = io.MultiWriter(os.Stderr, &logBuf)
+			installCmd.Stdout = writer
+			installCmd.Stderr = writer
 			if err := installCmd.Run(); err != nil {
 				return fmt.Errorf("npm install başarısız: %w", err)
 			}
@@ -244,8 +276,8 @@ func CloneAndBuild(app core.App, siteID string) error {
 			}
 			buildExec := exec.Command(parts[0], parts[1:]...)
 			buildExec.Dir = cloneDir
-			buildExec.Stdout = io.MultiWriter(os.Stdout, &logBuf)
-			buildExec.Stderr = io.MultiWriter(os.Stderr, &logBuf)
+			buildExec.Stdout = writer
+			buildExec.Stderr = writer
 
 			// For Next.js static export, set output: 'export' env hint
 			if framework.Name == "nextjs" {
