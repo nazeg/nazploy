@@ -390,56 +390,6 @@ export default function SiteDetail() {
             </dl>
           </div>
 
-          {/* SSL Card */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">SSL / Let's Encrypt</h2>
-              <div className="flex gap-2">
-                {site.ssl_status === 'error' && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await pb.send(`/api/dashboard/sites/${id}/ssl/disable`, { method: 'POST' })
-                        loadSite()
-                      } catch (err: any) {
-                        alert('Sıfırlama işlemi başarısız: ' + (err?.message || ''))
-                      }
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                  >
-                    Sıfırla
-                  </button>
-                )}
-                <button
-                  onClick={toggleSSL}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    site.ssl_status === 'active'
-                      ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                      : 'bg-green-50 text-green-600 hover:bg-green-100'
-                  }`}
-                >
-                  {site.ssl_status === 'active' ? 'SSL\'yi Kaldır' : 'SSL Ekle'}
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                site.ssl_status === 'active' ? 'bg-green-100 text-green-700' :
-                site.ssl_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                site.ssl_status === 'error' ? 'bg-red-100 text-red-700' :
-                'bg-gray-100 text-gray-600'
-              }`}>
-                {site.ssl_status === 'active' ? 'Aktif' :
-                 site.ssl_status === 'pending' ? 'İşleniyor...' :
-                 site.ssl_status === 'error' ? 'Hata' : 'Yok'}
-              </span>
-              {site.ssl_expiry && (
-                <span className="text-sm text-gray-500">
-                  Geçerlilik: {new Date(site.ssl_expiry).toLocaleDateString('tr-TR')}
-                </span>
-              )}
-            </div>
-          </div>
 
           {/* Databases Card */}
           {site.site_type !== 'pocketbase' && (
@@ -647,6 +597,57 @@ export default function SiteDetail() {
 
         {/* Sidebar Actions */}
         <div className="space-y-4">
+          {/* SSL Card */}
+          <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm text-gray-800">SSL / Let's Encrypt</h3>
+              <div className="flex gap-1.5">
+                {site.ssl_status === 'error' && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await pb.send(`/api/dashboard/sites/${id}/ssl/disable`, { method: 'POST' })
+                        loadSite()
+                      } catch (err: any) {
+                        alert('Sıfırlama işlemi başarısız: ' + (err?.message || ''))
+                      }
+                    }}
+                    className="px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                  >
+                    Sıfırla
+                  </button>
+                )}
+                <button
+                  onClick={toggleSSL}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    site.ssl_status === 'active'
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'bg-green-50 text-green-600 hover:bg-green-100'
+                  }`}
+                >
+                  {site.ssl_status === 'active' ? 'SSL Kaldır' : 'SSL Ekle'}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs pt-1">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                site.ssl_status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
+                site.ssl_status === 'pending' ? 'bg-yellow-50 text-yellow-700 border border-yellow-100 animate-pulse' :
+                site.ssl_status === 'error' ? 'bg-red-50 text-red-700 border border-red-100' :
+                'bg-gray-50 text-gray-600 border border-gray-100'
+              }`}>
+                {site.ssl_status === 'active' ? 'Aktif' :
+                 site.ssl_status === 'pending' ? 'İşleniyor...' :
+                 site.ssl_status === 'error' ? 'Hata' : 'Yok'}
+              </span>
+              {site.ssl_expiry && (
+                <span className="text-[10px] text-gray-400">
+                  Geçerlilik: {new Date(site.ssl_expiry).toLocaleDateString('tr-TR')}
+                </span>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white rounded-xl shadow-sm p-5">
             <h3 className="font-semibold mb-3">Aksiyonlar</h3>
             <div className="space-y-2">
