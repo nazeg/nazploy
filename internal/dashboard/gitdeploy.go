@@ -118,38 +118,40 @@ func CloneAndBuild(app core.App, siteID string) error {
 
 	// Try to get GitHub Token or App Credentials from superusers collection
 	githubToken := ""
-	var superuser core.Record
+	var superuser *core.Record
 	superusers, err := app.FindAllRecords("_superusers")
 	if err == nil && len(superusers) > 0 {
-		superuser = *superusers[0]
+		superuser = superusers[0]
 		githubToken = superuser.GetString("github_token")
 	}
 
 	// If GitHub App is configured, try to get installation token first
-	appID := superuser.GetString("github_app_id")
-	appPem := superuser.GetString("github_app_pem")
-	isAppToken := false
-	if appID != "" && appPem != "" {
-		owner, _, parseErr := ParseGithubOwnerAndRepo(repo)
-		if parseErr == nil {
-			instToken, tokenErr := GetInstallationTokenForRepo(appID, appPem, owner)
-			if tokenErr == nil {
-				githubToken = instToken
-				isAppToken = true
+	if superuser != nil {
+		appID := superuser.GetString("github_app_id")
+		appPem := superuser.GetString("github_app_pem")
+		isAppToken := false
+		if appID != "" && appPem != "" {
+			owner, _, parseErr := ParseGithubOwnerAndRepo(repo)
+			if parseErr == nil {
+				instToken, tokenErr := GetInstallationTokenForRepo(appID, appPem, owner)
+				if tokenErr == nil {
+					githubToken = instToken
+					isAppToken = true
+				} else {
+					log.Printf("[GitDeploy] GitHub App token alma hatası (PAT denenecek): %v", tokenErr)
+				}
 			} else {
-				log.Printf("[GitDeploy] GitHub App token alma hatası (PAT denenecek): %v", tokenErr)
+				log.Printf("[GitDeploy] GitHub sahibi ayrıştırılamadı: %v", parseErr)
 			}
-		} else {
-			log.Printf("[GitDeploy] GitHub sahibi ayrıştırılamadı: %v", parseErr)
 		}
-	}
 
-	// Rewrite GitHub URL to include token if present
-	if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
-		if isAppToken {
-			repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://x-access-token:%s@github.com/", githubToken), 1)
-		} else {
-			repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://%s@github.com/", githubToken), 1)
+		// Rewrite GitHub URL to include token if present
+		if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
+			if isAppToken {
+				repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://x-access-token:%s@github.com/", githubToken), 1)
+			} else {
+				repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://%s@github.com/", githubToken), 1)
+			}
 		}
 	}
 
