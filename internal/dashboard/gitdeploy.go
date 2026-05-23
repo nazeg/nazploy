@@ -113,6 +113,18 @@ func CloneAndBuild(app core.App, siteID string) error {
 		return fmt.Errorf("siteye tanımlı bir git deposu bulunmuyor")
 	}
 
+	// Try to get GitHub Token from superusers collection
+	githubToken := ""
+	superusers, err := app.FindAllRecords("_superusers")
+	if err == nil && len(superusers) > 0 {
+		githubToken = superusers[0].GetString("github_token")
+	}
+
+	// Rewrite GitHub URL to include token if present
+	if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
+		repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://%s@github.com/", githubToken), 1)
+	}
+
 	var logBuf bytes.Buffer
 	logWrite := func(format string, args ...interface{}) {
 		msg := fmt.Sprintf(format, args...)

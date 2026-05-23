@@ -6,12 +6,19 @@ export default function Settings() {
   const user = pb.authStore.model
   const initial = user?.email ? user.email.charAt(0).toUpperCase() : 'N'
 
+  // Password state
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+
+  // GitHub integration state
+  const [githubToken, setGithubToken] = useState(user?.github_token || '')
+  const [githubLoading, setGithubLoading] = useState(false)
+  const [githubSuccess, setGithubSuccess] = useState('')
+  const [githubError, setGithubError] = useState('')
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,12 +52,37 @@ export default function Settings() {
     }
   }
 
+  const handleGithubTokenChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGithubError('')
+    setGithubSuccess('')
+
+    setGithubLoading(true)
+    try {
+      const recordId = user?.id
+      if (!recordId) throw new Error('Kullanıcı oturum bilgisi bulunamadı.')
+
+      const updated = await pb.collection('_superusers').update(recordId, {
+        github_token: githubToken.trim(),
+      })
+
+      // Sync local authStore session cache
+      pb.authStore.save(pb.authStore.token, updated)
+
+      setGithubSuccess('GitHub erişim belirteci başarıyla kaydedildi.')
+    } catch (err: any) {
+      setGithubError(err?.message || 'Kaydedilemedi. Lütfen yetkileri ve belirteci kontrol edin.')
+    } finally {
+      setGithubLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Ayarlar & Güvenlik</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Yönetici hesabı güvenlik ayarlarınızı yapılandırın.
+          Yönetici hesabı güvenlik ve entegrasyon ayarlarınızı yapılandırın.
         </p>
       </div>
 
@@ -82,88 +114,145 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Change Password Card */}
-        <div className="md:col-span-2 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-5">
-          <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-              <Key className="w-5 h-5" />
+        <div className="md:col-span-2 space-y-6">
+          {/* Change Password Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-5">
+            <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                <Key className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900">Şifre Değiştir</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Nazploy yönetici giriş şifresini güncelleyin</p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-bold text-gray-900">Şifre Değiştir</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Nazploy yönetici giriş şifresini güncelleyin</p>
-            </div>
+
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              {error && (
+                <div className="bg-rose-50 text-rose-600 text-xs p-4 rounded-xl border border-rose-100 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+              {success && (
+                <div className="bg-emerald-50 text-emerald-600 text-xs p-4 rounded-xl border border-emerald-100 flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>{success}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Mevcut Şifre</label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="Mevcut şifrenizi girin"
+                    className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
+                    required
+                  />
+                  <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Yeni Şifre</label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Yeni şifre belirleyin"
+                      className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
+                      required
+                    />
+                    <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Yeni Şifre Tekrar</label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Yeni şifreyi onaylayın"
+                      className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
+                      required
+                    />
+                    <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-2.5 px-5 text-xs font-bold transition-all shadow-sm shadow-blue-500/10 flex items-center justify-center gap-2"
+              >
+                <Key className="w-4 h-4" />
+                {loading ? 'Şifre Güncelleniyor...' : 'Şifreyi Güncelle'}
+              </button>
+            </form>
           </div>
 
-          <form onSubmit={handlePasswordChange} className="space-y-4">
-            {error && (
-              <div className="bg-rose-50 text-rose-600 text-xs p-4 rounded-xl border border-rose-100 flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <span>{error}</span>
+          {/* GitHub Integration Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-5">
+            <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+              <div className="p-2.5 bg-zinc-900 text-white rounded-xl">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
               </div>
-            )}
-            {success && (
-              <div className="bg-emerald-50 text-emerald-600 text-xs p-4 rounded-xl border border-emerald-100 flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>{success}</span>
+              <div>
+                <h2 className="font-bold text-gray-900">GitHub Entegrasyonu</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Private repolarınıza erişmek için erişim belirteci tanımlayın</p>
               </div>
-            )}
+            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Mevcut Şifre</label>
-              <div className="relative">
+            <form onSubmit={handleGithubTokenChange} className="space-y-4">
+              {githubError && (
+                <div className="bg-rose-50 text-rose-600 text-xs p-4 rounded-xl border border-rose-100 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <span>{githubError}</span>
+                </div>
+              )}
+              {githubSuccess && (
+                <div className="bg-emerald-50 text-emerald-600 text-xs p-4 rounded-xl border border-emerald-100 flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span>{githubSuccess}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">GitHub Personal Access Token (PAT)</label>
                 <input
                   type="password"
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  placeholder="Mevcut şifrenizi girin"
-                  className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                  required
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  placeholder="ghp_..."
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 font-mono"
                 />
-                <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Yeni Şifre</label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Yeni şifre belirleyin"
-                    className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                    required
-                  />
-                  <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
+                  GitHub hesabınızdan aldığınız <strong>Personal Access Token (classic)</strong> veya <strong>Fine-grained token</strong> değerini buraya girin. Bu belirteç, private repolarınızı listelemek ve sunucuya klonlamak için kullanılacaktır. Gerekli yetkiler: <strong>repo (classic)</strong> veya <strong>Metadata: Read-only, Contents: Read-only (fine-grained)</strong>.
+                </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Yeni Şifre Tekrar</label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Yeni şifreyi onaylayın"
-                    className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                    required
-                  />
-                  <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl py-2.5 px-5 text-xs font-bold transition-all shadow-sm shadow-blue-500/10 flex items-center justify-center gap-2"
-            >
-              <Key className="w-4 h-4" />
-              {loading ? 'Şifre Güncelleniyor...' : 'Şifreyi Güncelle'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={githubLoading}
+                className="bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white rounded-xl py-2.5 px-5 text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                {githubLoading ? 'Kaydediliyor...' : 'Belirteci Kaydet'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>
