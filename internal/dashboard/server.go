@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -1149,4 +1150,380 @@ func generateRandomID() string {
 		b[i] = charset[n.Int64()]
 	}
 	return string(b)
+}
+
+// ── GitHub App Manifest Integration Endpoints ──
+
+// HandleGithubCallback handles the public redirect from GitHub App manifest creation.
+// It exchanges the code for the app's credentials, saves them to the superuser account,
+// and redirects the user to install the application.
+func HandleGithubCallback(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	code := e.Request.URL.Query().Get("code")
+	if code == "" {
+		return e.String(http.StatusBadRequest, "Missing code parameter")
+	}
+
+	scheme := "http"
+	if e.Request.TLS != nil || e.Request.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	redirectHost := scheme + "://" + e.Request.Host
+
+	// Exchange code for app manifest details
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Post("https://api.github.com/app-manifests/"+code+"/conversions", "application/json", nil)
+	if err != nil {
+		return e.Redirect(http.StatusTemporaryRedirect, redirectHost+"/settings?github_error=conversion_failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return e.Redirect(http.StatusTemporaryRedirect, redirectHost+"/settings?github_error=manifest_conversion_failed_status")
+	}
+
+	var conversion struct {
+		ID            int64  `json:"id"`
+		Slug          string `json:"slug"`
+		ClientID      string `json:"client_id"`
+		ClientSecret  string `json:"client_secret"`
+		WebhookSecret string `json:"webhook_secret"`
+		PEM           string `json:"pem"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&conversion); err != nil {
+		return e.Redirect(http.StatusTemporaryRedirect, redirectHost+"/settings?github_error=decode_failed")
+	}
+
+	// Save to superusers
+	superusers, err := app.FindAllRecords("_superusers")
+	if err != nil || len(superusers) == 0 {
+		return e.String(http.StatusInternalServerError, "Superuser record not found")
+	}
+	su := superusers[0]
+	su.Set("github_app_id", fmt.Sprintf("%d", conversion.ID))
+	su.Set("github_app_client_id", conversion.ClientID)
+	su.Set("github_app_client_secret", conversion.ClientSecret)
+	su.Set("github_app_webhook_secret", conversion.WebhookSecret)
+	su.Set("github_app_pem", conversion.PEM)
+	su.Set("github_app_slug", conversion.Slug)
+
+	if err := app.Save(su); err != nil {
+		return e.Redirect(http.StatusTemporaryRedirect, redirectHost+"/settings?github_error=save_failed")
+	}
+
+	// Redirect to GitHub App installation flow
+	installURL := fmt.Sprintf("https://github.com/apps/%s/installations/new", conversion.Slug)
+	return e.Redirect(http.StatusTemporaryRedirect, installURL)
+}
+
+// HandleGetGithubRepos fetches the repositories for the configured GitHub App or PAT.
+func HandleGetGithubRepos(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	superusers, err := app.FindAllRecords("_superusers")
+	if err != nil || len(superusers) == 0 {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Superuser not found"})
+	}
+	superuser := superusers[0]
+
+	appID := superuser.GetString("github_app_id")
+	appPem := superuser.GetString("github_app_pem")
+	patToken := superuser.GetString("github_token")
+
+	type RepoInfo struct {
+		ID       int64  `json:"id"`
+		FullName string `json:"full_name"`
+		HTMLURL  string `json:"html_url"`
+		Private  bool   `json:"private"`
+	}
+
+	var repos []RepoInfo
+
+	// 1. Try App integration
+	if appID != "" && appPem != "" {
+		jwtToken, err := GenerateAppJWT(appID, appPem)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]string{"error": "JWT generation failed: " + err.Error()})
+		}
+
+		client := &http.Client{Timeout: 15 * time.Second}
+		req, _ := http.NewRequest("GET", "https://api.github.com/app/installations", nil)
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				var installations []struct {
+					ID int64 `json:"id"`
+				}
+				json.NewDecoder(resp.Body).Decode(&installations)
+
+				for _, inst := range installations {
+					tokenURL := fmt.Sprintf("https://api.github.com/app/installations/%d/access_tokens", inst.ID)
+					tReq, _ := http.NewRequest("POST", tokenURL, nil)
+					tReq.Header.Set("Authorization", "Bearer "+jwtToken)
+					tReq.Header.Set("Accept", "application/vnd.github+json")
+					tReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+					tResp, err := client.Do(tReq)
+					if err != nil {
+						continue
+					}
+					var tokenData struct {
+						Token string `json:"token"`
+					}
+					json.NewDecoder(tResp.Body).Decode(&tokenData)
+					tResp.Body.Close()
+
+					if tokenData.Token != "" {
+						rReq, _ := http.NewRequest("GET", "https://api.github.com/installation/repositories?per_page=100", nil)
+						rReq.Header.Set("Authorization", "token "+tokenData.Token)
+						rReq.Header.Set("Accept", "application/vnd.github+json")
+						rReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+						rResp, err := client.Do(rReq)
+						if err != nil {
+							continue
+						}
+						var repoList struct {
+							Repositories []RepoInfo `json:"repositories"`
+						}
+						json.NewDecoder(rResp.Body).Decode(&repoList)
+						rResp.Body.Close()
+
+						repos = append(repos, repoList.Repositories...)
+					}
+				}
+				return e.JSON(http.StatusOK, repos)
+			}
+		}
+	}
+
+	// 2. Fallback to PAT
+	if patToken != "" {
+		client := &http.Client{Timeout: 15 * time.Second}
+		req, _ := http.NewRequest("GET", "https://api.github.com/user/repos?per_page=100&sort=updated", nil)
+		req.Header.Set("Authorization", "token "+patToken)
+		req.Header.Set("Accept", "application/vnd.github+json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			json.NewDecoder(resp.Body).Decode(&repos)
+			return e.JSON(http.StatusOK, repos)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return e.JSON(resp.StatusCode, map[string]string{"error": string(body)})
+	}
+
+	return e.JSON(http.StatusOK, repos)
+}
+
+// HandleGetGithubBranches fetches the branches for a specific repository.
+func HandleGetGithubBranches(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	repoParam := e.Request.URL.Query().Get("repo")
+	if repoParam == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "repo parametresi zorunludur"})
+	}
+
+	owner, name, err := ParseGithubOwnerAndRepo(repoParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	superusers, err := app.FindAllRecords("_superusers")
+	if err != nil || len(superusers) == 0 {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Superuser not found"})
+	}
+	superuser := superusers[0]
+
+	appID := superuser.GetString("github_app_id")
+	appPem := superuser.GetString("github_app_pem")
+	patToken := superuser.GetString("github_token")
+
+	token := ""
+	if appID != "" && appPem != "" {
+		instToken, err := GetInstallationTokenForRepo(appID, appPem, owner)
+		if err == nil {
+			token = instToken
+		}
+	}
+
+	if token == "" && patToken != "" {
+		token = patToken
+	}
+
+	if token == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "GitHub entegrasyonu veya PAT bulunamadı"})
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/branches?per_page=100", owner, name)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		var branches []interface{}
+		json.NewDecoder(resp.Body).Decode(&branches)
+		return e.JSON(http.StatusOK, branches)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	return e.JSON(resp.StatusCode, map[string]string{"error": string(body)})
+}
+
+// HandleGetGithubAppStatus returns whether a GitHub App is configured.
+func HandleGetGithubAppStatus(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	superusers, err := app.FindAllRecords("_superusers")
+	if err != nil || len(superusers) == 0 {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Superuser not found"})
+	}
+	superuser := superusers[0]
+
+	appID := superuser.GetString("github_app_id")
+	clientID := superuser.GetString("github_app_client_id")
+	slug := superuser.GetString("github_app_slug")
+
+	isConfigured := appID != "" && clientID != ""
+
+	scheme := "http"
+	if e.Request.TLS != nil || e.Request.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	webhookURL := fmt.Sprintf("%s://%s/api/public/github/webhook", scheme, e.Request.Host)
+
+	return e.JSON(http.StatusOK, map[string]interface{}{
+		"is_configured": isConfigured,
+		"app_id":        appID,
+		"client_id":     clientID,
+		"slug":          slug,
+		"webhook_url":   webhookURL,
+	})
+}
+
+// HandleDisconnectGithubApp clears GitHub App settings.
+func HandleDisconnectGithubApp(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	superusers, err := app.FindAllRecords("_superusers")
+	if err != nil || len(superusers) == 0 {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Superuser not found"})
+	}
+	superuser := superusers[0]
+
+	superuser.Set("github_app_id", "")
+	superuser.Set("github_app_client_id", "")
+	superuser.Set("github_app_client_secret", "")
+	superuser.Set("github_app_webhook_secret", "")
+	superuser.Set("github_app_pem", "")
+	superuser.Set("github_app_slug", "")
+
+	if err := app.Save(superuser); err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Kaydedilemedi: " + err.Error()})
+	}
+
+	return e.JSON(http.StatusOK, map[string]string{"message": "GitHub App bağlantısı kesildi."})
+}
+
+// HandleGithubAppWebhook handles global push events from GitHub App.
+func HandleGithubAppWebhook(e *core.RequestEvent, app *pocketbase.PocketBase, ngx *NginxManager) error {
+	superusers, err := app.FindAllRecords("_superusers")
+	if err != nil || len(superusers) == 0 {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Superuser not found"})
+	}
+	superuser := superusers[0]
+
+	webhookSecret := superuser.GetString("github_app_webhook_secret")
+
+	// Verify signature if secret is configured
+	if webhookSecret != "" {
+		sigHeader := e.Request.Header.Get("X-Hub-Signature-256")
+		if sigHeader == "" {
+			return e.JSON(http.StatusUnauthorized, map[string]string{"error": "missing signature"})
+		}
+
+		body, err := io.ReadAll(e.Request.Body)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read body"})
+		}
+		// Restore body
+		e.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+		mac := hmac.New(sha256.New, []byte(webhookSecret))
+		mac.Write(body)
+		expectedSig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+		if !hmac.Equal([]byte(expectedSig), []byte(sigHeader)) {
+			return e.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid signature"})
+		}
+	}
+
+	event := e.Request.Header.Get("X-GitHub-Event")
+	if event != "" && event != "push" {
+		return e.JSON(http.StatusOK, map[string]string{"message": "Event ignored"})
+	}
+
+	// Parse payload
+	var payload struct {
+		Ref        string `json:"ref"` // refs/heads/branch
+		Repository struct {
+			HTMLURL string `json:"html_url"`
+		} `json:"repository"`
+	}
+
+	if err := e.BindBody(&payload); err != nil {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid body"})
+	}
+
+	repoURL := strings.TrimSpace(payload.Repository.HTMLURL)
+	if repoURL == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "missing repository url"})
+	}
+
+	normRepoURL := strings.TrimSuffix(repoURL, ".git")
+
+	// Find matching active sites
+	records, err := app.FindAllRecords("sites", dbx.NewExp("status = 'active' AND git_repo != ''"))
+	if err != nil {
+		return e.JSON(http.StatusOK, map[string]string{"message": "No active sites found"})
+	}
+
+	triggeredCount := 0
+	for _, record := range records {
+		siteRepo := strings.TrimSuffix(strings.TrimSpace(record.GetString("git_repo")), ".git")
+		if strings.EqualFold(siteRepo, normRepoURL) {
+			branch := record.GetString("git_branch")
+			if branch == "" {
+				branch = "main"
+			}
+			expectedRef := "refs/heads/" + branch
+
+			if payload.Ref == expectedRef {
+				triggeredCount++
+				go func(siteID string) {
+					if err := CloneAndBuild(app, siteID); err != nil {
+						log.Printf("[App Webhook GitDeploy] Hata (site: %s): %v", siteID, err)
+					} else {
+						ngx.Reload()
+						log.Printf("[App Webhook GitDeploy] Başarılı (site: %s)", siteID)
+					}
+				}(record.Id)
+			}
+		}
+	}
+
+	return e.JSON(http.StatusOK, map[string]interface{}{
+		"message":   "Webhook processed",
+		"triggered": triggeredCount,
+	})
 }

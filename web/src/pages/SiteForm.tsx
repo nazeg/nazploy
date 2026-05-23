@@ -26,30 +26,37 @@ export default function SiteForm() {
   const [outputDir, setOutputDir] = useState('')
 
   // GitHub API integration
-  const githubToken = pb.authStore.model?.github_token || ''
+  const [githubConfigured, setGithubConfigured] = useState(false)
   const [githubRepos, setGithubRepos] = useState<any[]>([])
   const [githubBranches, setGithubBranches] = useState<any[]>([])
   const [reposLoading, setReposLoading] = useState(false)
   const [branchesLoading, setBranchesLoading] = useState(false)
 
   useEffect(() => {
-    if (useGitDeploy && githubToken && githubRepos.length === 0) {
+    async function checkGithubStatus() {
+      try {
+        const appStatus = await pb.send('/api/dashboard/github/app-status', { method: 'GET' })
+        const hasApp = appStatus.is_configured
+        const hasPat = !!pb.authStore.model?.github_token
+        setGithubConfigured(hasApp || hasPat)
+      } catch (err) {
+        setGithubConfigured(!!pb.authStore.model?.github_token)
+      }
+    }
+    checkGithubStatus()
+  }, [])
+
+  useEffect(() => {
+    if (useGitDeploy && githubConfigured && githubRepos.length === 0) {
       fetchGithubRepos()
     }
-  }, [useGitDeploy, githubToken])
+  }, [useGitDeploy, githubConfigured])
 
   async function fetchGithubRepos() {
     setReposLoading(true)
     try {
-      const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
-        headers: {
-          Authorization: `token ${githubToken}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setGithubRepos(data)
-      }
+      const repos = await pb.send('/api/dashboard/github/repos', { method: 'GET' })
+      setGithubRepos(repos || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -58,23 +65,10 @@ export default function SiteForm() {
   }
 
   async function fetchGithubBranches(repoUrl: string) {
-    if (!githubToken) return
-    const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
-    if (!match) return
-    const owner = match[1]
-    const name = match[2].replace(/\.git$/, '')
-
     setBranchesLoading(true)
     try {
-      const response = await fetch(`https://api.github.com/repos/${owner}/${name}/branches`, {
-        headers: {
-          Authorization: `token ${githubToken}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setGithubBranches(data)
-      }
+      const branches = await pb.send(`/api/dashboard/github/branches?repo=${encodeURIComponent(repoUrl)}`, { method: 'GET' })
+      setGithubBranches(branches || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -83,10 +77,10 @@ export default function SiteForm() {
   }
 
   useEffect(() => {
-    if (gitRepo && githubToken) {
+    if (gitRepo && githubConfigured) {
       fetchGithubBranches(gitRepo)
     }
-  }, [gitRepo, githubToken])
+  }, [gitRepo, githubConfigured])
 
   useEffect(() => {
     if (isEdit) {
@@ -330,7 +324,7 @@ export default function SiteForm() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     GitHub Repo URL <span className="text-red-500">*</span>
                   </label>
-                  {githubToken ? (
+                  {githubConfigured ? (
                     <div className="relative">
                       <select
                         value={gitRepo}
@@ -370,9 +364,9 @@ export default function SiteForm() {
                     </div>
                   )}
                   <p className="text-[10px] text-gray-400 mt-1">
-                    {githubToken 
-                      ? 'GitHub erişim belirteciniz aktif. Hem public hem private repolarınızı listeleyebilirsiniz.' 
-                      : 'Ayarlar sayfasından GitHub Token tanımlayarak private repolarınızı da buraya bağlayabilirsiniz.'
+                    {githubConfigured 
+                      ? 'GitHub entegrasyonunuz aktif. Hem public hem private repolarınızı listeleyebilirsiniz.' 
+                      : 'Ayarlar sayfasından GitHub App veya erişim belirteci tanımlayarak private repolarınızı da buraya bağlayabilirsiniz.'
                     }
                   </p>
                 </div>
@@ -380,7 +374,7 @@ export default function SiteForm() {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
-                    {githubToken && githubBranches.length > 0 ? (
+                    {githubConfigured && githubBranches.length > 0 ? (
                       <select
                         value={gitBranch}
                         onChange={(e) => setGitBranch(e.target.value)}

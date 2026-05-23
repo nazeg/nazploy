@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -113,16 +116,41 @@ func CloneAndBuild(app core.App, siteID string) error {
 		return fmt.Errorf("siteye tanımlı bir git deposu bulunmuyor")
 	}
 
-	// Try to get GitHub Token from superusers collection
+	// Try to get GitHub Token or App Credentials from superusers collection
 	githubToken := ""
+	var superuser core.Record
 	superusers, err := app.FindAllRecords("_superusers")
 	if err == nil && len(superusers) > 0 {
-		githubToken = superusers[0].GetString("github_token")
+		superuser = *superusers[0]
+		githubToken = superuser.GetString("github_token")
+	}
+
+	// If GitHub App is configured, try to get installation token first
+	appID := superuser.GetString("github_app_id")
+	appPem := superuser.GetString("github_app_pem")
+	isAppToken := false
+	if appID != "" && appPem != "" {
+		owner, _, parseErr := ParseGithubOwnerAndRepo(repo)
+		if parseErr == nil {
+			instToken, tokenErr := GetInstallationTokenForRepo(appID, appPem, owner)
+			if tokenErr == nil {
+				githubToken = instToken
+				isAppToken = true
+			} else {
+				log.Printf("[GitDeploy] GitHub App token alma hatası (PAT denenecek): %v", tokenErr)
+			}
+		} else {
+			log.Printf("[GitDeploy] GitHub sahibi ayrıştırılamadı: %v", parseErr)
+		}
 	}
 
 	// Rewrite GitHub URL to include token if present
 	if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
-		repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://%s@github.com/", githubToken), 1)
+		if isAppToken {
+			repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://x-access-token:%s@github.com/", githubToken), 1)
+		} else {
+			repo = strings.Replace(repo, "https://github.com/", fmt.Sprintf("https://%s@github.com/", githubToken), 1)
+		}
 	}
 
 	var logBuf bytes.Buffer
@@ -347,3 +375,145 @@ func copyFile(src, dst string) error {
 	}
 	return out.Sync()
 }
+
+// ── GitHub App Helpers ──
+
+// ParseGithubOwnerAndRepo parses the owner and repository name from various GitHub URL formats.
+func ParseGithubOwnerAndRepo(repoURL string) (string, string, error) {
+	// Normalize URL by trimming spaces and suffix
+	u := strings.TrimSpace(repoURL)
+	u = strings.TrimSuffix(u, ".git")
+
+	// HTTPS: https://github.com/owner/repo
+	if strings.Contains(u, "github.com/") {
+		parts := strings.Split(u, "github.com/")
+		if len(parts) > 1 {
+			subparts := strings.Split(parts[1], "/")
+			if len(subparts) >= 2 {
+				return subparts[0], subparts[1], nil
+			}
+		}
+	}
+
+	// SSH: git@github.com:owner/repo
+	if strings.Contains(u, "github.com:") {
+		parts := strings.Split(u, "github.com:")
+		if len(parts) > 1 {
+			subparts := strings.Split(parts[1], "/")
+			if len(subparts) >= 2 {
+				return subparts[0], subparts[1], nil
+			}
+		}
+	}
+
+	return "", "", fmt.Errorf("GitHub sahibi/reposu URL'den ayrıştırılamadı: %s", repoURL)
+}
+
+// GenerateAppJWT creates a signed JWT for GitHub App authentication.
+func GenerateAppJWT(appID string, privateKeyPEM string) (string, error) {
+	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(privateKeyPEM))
+	if err != nil {
+		return "", fmt.Errorf("RSA private key ayrıştırılamadı: %w", err)
+	}
+
+	now := time.Now()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iat": now.Add(-60 * time.Second).Unix(), // 60 seconds buffer for clock drift
+		"exp": now.Add(9 * time.Minute).Unix(),   // 10 minutes maximum
+		"iss": appID,
+	})
+
+	tokenString, err := token.SignedString(key)
+	if err != nil {
+		return "", fmt.Errorf("JWT imzalanırken hata oluştu: %w", err)
+	}
+
+	return tokenString, nil
+}
+
+// GetInstallationTokenForRepo retrieves an installation token for a given repository owner/org.
+func GetInstallationTokenForRepo(appID string, pem string, owner string) (string, error) {
+	jwtToken, err := GenerateAppJWT(appID, pem)
+	if err != nil {
+		return "", err
+	}
+
+	// 1. List all installations of this GitHub App
+	req, err := http.NewRequest("GET", "https://api.github.com/app/installations", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("GitHub API bağlantı hatası: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("GitHub installations sorgusu başarısız (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var installations []struct {
+		ID      int64 `json:"id"`
+		Account struct {
+			Login string `json:"login"`
+		} `json:"account"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&installations); err != nil {
+		return "", fmt.Errorf("installations response JSON ayrıştırılamadı: %w", err)
+	}
+
+	var installationID int64
+	for _, inst := range installations {
+		if strings.EqualFold(inst.Account.Login, owner) {
+			installationID = inst.ID
+			break
+		}
+	}
+
+	if installationID == 0 {
+		// Fallback to the first installation if login mismatch occurs but at least one installation exists
+		if len(installations) > 0 {
+			installationID = installations[0].ID
+		} else {
+			return "", fmt.Errorf("GitHub organizasyon/kullanıcı '%s' için aktif uygulama yüklemesi bulunamadı", owner)
+		}
+	}
+
+	// 2. Request installation access token
+	tokenURL := fmt.Sprintf("https://api.github.com/app/installations/%d/access_tokens", installationID)
+	req, err = http.NewRequest("POST", tokenURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("GitHub access token talebi başarısız: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("GitHub token üretilemedi (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("token response JSON ayrıştırılamadı: %w", err)
+	}
+
+	return tokenResp.Token, nil
+}
+

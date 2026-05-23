@@ -116,9 +116,33 @@ func main() {
 			return dashboard.HandleStats(e, app)
 		})
 
+		// GitHub App / PAT Integration
+		g.GET("/github/repos", func(e *core.RequestEvent) error {
+			return dashboard.HandleGetGithubRepos(e, app)
+		})
+		g.GET("/github/branches", func(e *core.RequestEvent) error {
+			return dashboard.HandleGetGithubBranches(e, app)
+		})
+		g.GET("/github/app-status", func(e *core.RequestEvent) error {
+			return dashboard.HandleGetGithubAppStatus(e, app)
+		})
+		g.POST("/github/disconnect", func(e *core.RequestEvent) error {
+			return dashboard.HandleDisconnectGithubApp(e, app)
+		})
+
 		// Public Webhook (unauthenticated)
 		se.Router.POST("/api/public/webhooks/github/{id}", func(e *core.RequestEvent) error {
 			return dashboard.HandleGithubWebhook(e, app, ngx)
+		})
+
+		// Public GitHub App Callback
+		se.Router.GET("/api/public/github/callback", func(e *core.RequestEvent) error {
+			return dashboard.HandleGithubCallback(e, app)
+		})
+
+		// Public GitHub App Webhook
+		se.Router.POST("/api/public/github/webhook", func(e *core.RequestEvent) error {
+			return dashboard.HandleGithubAppWebhook(e, app, ngx)
 		})
 
 		// ── Frontend SPA ──
