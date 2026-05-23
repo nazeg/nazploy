@@ -107,6 +107,9 @@ func main() {
 		g.POST("/nginx/reload", func(e *core.RequestEvent) error {
 			return dashboard.HandleNginxReload(e, ngx)
 		})
+		g.GET("/nginx/logs", func(e *core.RequestEvent) error {
+			return dashboard.HandleNginxLogs(e)
+		})
 
 		// Dashboard stats
 		g.GET("/stats", func(e *core.RequestEvent) error {

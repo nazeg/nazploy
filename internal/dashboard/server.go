@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -804,9 +805,30 @@ func HandleNextPort(e *core.RequestEvent, app *pocketbase.PocketBase, pm *PortMa
 // ── Nginx ──
 
 func HandleNginxStatus(e *core.RequestEvent, ngx *NginxManager) error {
-	running := ngx.IsRunning()
+	running := false
+	if runtime.GOOS == "windows" {
+		running = ngx.IsRunning()
+	} else {
+		cmd := exec.Command("systemctl", "is-active", "nginx")
+		err := cmd.Run()
+		running = (err == nil)
+	}
+
+	statusOutput := ""
+	configTest := ""
+
+	if runtime.GOOS == "windows" {
+		statusOutput = "Windows üzerinde systemctl kullanılamıyor. Nginx durum testi basit sürümle yapıldı."
+		configTest = "Windows üzerinde nginx -t kullanılamıyor."
+	} else {
+		statusOutput = runCommandOutput("systemctl", "status", "nginx")
+		configTest = runCommandOutput("nginx", "-t")
+	}
+
 	return e.JSON(http.StatusOK, map[string]interface{}{
-		"running": running,
+		"running":       running,
+		"status_output": statusOutput,
+		"config_test":   configTest,
 	})
 }
 
@@ -815,6 +837,51 @@ func HandleNginxReload(e *core.RequestEvent, ngx *NginxManager) error {
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return e.JSON(http.StatusOK, map[string]string{"message": "nginx reloaded"})
+}
+
+func HandleNginxLogs(e *core.RequestEvent) error {
+	service := e.Request.URL.Query().Get("service")
+	if service == "" {
+		service = "nginx"
+	}
+	if service != "nginx" && service != "nazploy" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "invalid service"})
+	}
+
+	linesStr := e.Request.URL.Query().Get("lines")
+	lines := 50
+	if linesStr != "" {
+		if l, err := strconv.Atoi(linesStr); err == nil && l > 0 && l <= 500 {
+			lines = l
+		}
+	}
+
+	logsOutput := ""
+	if runtime.GOOS == "windows" {
+		logsOutput = fmt.Sprintf("Windows üzerinde journalctl kullanılamıyor. (%s logs)", service)
+	} else {
+		logsOutput = runCommandOutput("journalctl", "-u", service, "--no-pager", "-n", strconv.Itoa(lines))
+	}
+
+	return e.JSON(http.StatusOK, map[string]interface{}{
+		"service": service,
+		"logs":    logsOutput,
+	})
+}
+
+func runCommandOutput(name string, args ...string) string {
+	cmd := exec.Command(name, args...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	if err != nil {
+		if out.Len() > 0 {
+			return out.String()
+		}
+		return err.Error()
+	}
+	return out.String()
 }
 
 // ── Stats ──
