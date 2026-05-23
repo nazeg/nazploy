@@ -180,12 +180,14 @@ func CloneAndBuild(app core.App, siteID string) error {
 		}
 	}
 
-	// Setup environment variables securely (passing token via GIT_CONFIG_PARAMETERS to prevent leakage)
+	// Setup environment variables securely (passing token via GIT_CONFIG_COUNT/KEY/VALUE to prevent leakage)
 	gitEnv := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
 		authString := "x-access-token:" + githubToken
 		base64Auth := base64.StdEncoding.EncodeToString([]byte(authString))
-		gitEnv = append(gitEnv, "GIT_CONFIG_PARAMETERS=http.https://github.com/.extraHeader=Authorization: Basic "+base64Auth)
+		gitEnv = append(gitEnv, "GIT_CONFIG_COUNT=1")
+		gitEnv = append(gitEnv, "GIT_CONFIG_KEY_0=http.https://github.com/.extraHeader")
+		gitEnv = append(gitEnv, "GIT_CONFIG_VALUE_0=Authorization: Basic "+base64Auth)
 	}
 
 	var safeBuf safeLogBuffer
@@ -306,8 +308,8 @@ func CloneAndBuild(app core.App, siteID string) error {
 			}
 
 			// Command Allowlist Validation
-			if !isCommandAllowed(parts[0]) {
-				return fmt.Errorf("güvenlik hatası: '%s' komutunu çalıştırmaya yetkiniz yok. Sadece izin verilen build araçları kullanılabilir", parts[0])
+			if !isCommandAllowed(parts) {
+				return fmt.Errorf("güvenlik hatası: '%s' komutunu veya parametrelerini çalıştırmaya yetkiniz yok. Sadece izin verilen build araçları kullanılabilir", parts[0])
 			}
 
 			buildExec := createSecureCommand(deployUser, cloneDir, parts[0], parts[1:]...)
@@ -424,6 +426,11 @@ func copyDir(src, dst string) error {
 
 		// Skip .git, node_modules
 		if entry.Name() == ".git" || entry.Name() == "node_modules" {
+			continue
+		}
+
+		// Skip symbolic links to prevent security vulnerabilities (symlink traversal/arbitrary file read)
+		if entry.Type()&os.ModeSymlink != 0 {
 			continue
 		}
 
@@ -600,10 +607,12 @@ func GetInstallationTokenForRepo(appID string, pem string, owner string) (string
 	return tokenResp.Token, nil
 }
 
-// isCommandAllowed checks if the given command is in the list of allowed build utilities
-func isCommandAllowed(cmdName string) bool {
-	// Clean the command name
-	cmdName = strings.TrimSpace(cmdName)
+// isCommandAllowed checks if the given command and its arguments are in the list of allowed build utilities and parameters
+func isCommandAllowed(parts []string) bool {
+	if len(parts) == 0 {
+		return false
+	}
+	cmdName := strings.TrimSpace(parts[0])
 
 	// Reject path separators to prevent running local/arbitrary binaries (e.g. ./npm or /tmp/npm)
 	if strings.ContainsAny(cmdName, "/\\") || strings.HasPrefix(cmdName, ".") {
@@ -631,7 +640,34 @@ func isCommandAllowed(cmdName string) bool {
 		"deno":   true,
 	}
 
-	return allowed[base]
+	if !allowed[base] {
+		return false
+	}
+
+	// Additional argument checks for security
+	args := parts[1:]
+	switch base {
+	case "node", "deno":
+		for _, arg := range args {
+			argLower := strings.ToLower(arg)
+			// Block interactive mode and inline evaluation
+			if argLower == "-e" || argLower == "--eval" ||
+				argLower == "-p" || argLower == "--print" ||
+				argLower == "-i" || argLower == "--interactive" {
+				return false
+			}
+		}
+	case "npx":
+		for _, arg := range args {
+			argLower := strings.ToLower(arg)
+			// Prevent automatic remote package installations/prompts
+			if argLower == "-y" || argLower == "--yes" {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 // runCommandWithTimeout executes a command and terminates its process group if it exceeds the timeout limit.

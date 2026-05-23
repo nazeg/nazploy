@@ -91,7 +91,6 @@ export default function Settings() {
     url: origin,
     redirect_url: `${origin}/api/public/github/callback`,
     setup_url: `${origin}/settings?github_app_installed=true`,
-    state: githubState,
     hook_attributes: {
       url: `${origin}/api/public/github/webhook`
     },
@@ -384,7 +383,7 @@ export default function Settings() {
                     </div>
                   ) : null}
 
-                  <form action="https://github.com/settings/apps/new" method="post" target="_self">
+                  <form action={`https://github.com/settings/apps/new?state=${githubState}`} method="post" target="_self">
                     <input type="hidden" name="manifest" value={manifestString} />
                     <button
                       type="submit"
