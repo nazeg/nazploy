@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -74,10 +75,23 @@ func DetectFramework(projectDir string) FrameworkInfo {
 
 	// Vite (React, Vue, Svelte, etc.)
 	if allDeps["vite"] || allDeps["@vitejs/plugin-react"] || allDeps["@vitejs/plugin-vue"] || allDeps["@vitejs/plugin-svelte"] {
+		outputDir := "dist"
+		// Try to read vite.config.js or vite.config.ts to detect custom outDir
+		for _, cfgName := range []string{"vite.config.js", "vite.config.ts"} {
+			cfgPath := filepath.Join(projectDir, cfgName)
+			if cfgData, err := os.ReadFile(cfgPath); err == nil {
+				re := regexp.MustCompile(`outDir\s*:\s*['"]([^'"]+)['"]`)
+				matches := re.FindSubmatch(cfgData)
+				if len(matches) > 1 {
+					outputDir = string(matches[1])
+					break
+				}
+			}
+		}
 		return FrameworkInfo{
 			Name:      "vite",
 			BuildCmd:  "npm run build",
-			OutputDir: "dist",
+			OutputDir: outputDir,
 		}
 	}
 
