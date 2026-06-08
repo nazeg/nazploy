@@ -120,6 +120,10 @@ func main() {
 		g.POST("/system/update", func(e *core.RequestEvent) error {
 			return dashboard.HandleSystemUpdate(e, app)
 		})
+		g.GET("/system/update/logs", func(e *core.RequestEvent) error {
+			return dashboard.HandleSystemUpdateLogs(e, app)
+		})
+
 
 
 		// GitHub App / PAT Integration

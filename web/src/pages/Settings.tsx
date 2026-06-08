@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import pb from '../lib/pocketbase'
 import { Lock, CheckCircle2, AlertCircle, Key, Shield, ExternalLink, RefreshCw } from 'lucide-react'
 
@@ -36,6 +36,10 @@ export default function Settings() {
   const [updateSuccess, setUpdateSuccess] = useState('')
   const [updateError, setUpdateError] = useState('')
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [showLogsModal, setShowLogsModal] = useState(false)
+  const [updateLogs, setUpdateLogs] = useState('')
+
+  const logEndRef = useRef<HTMLDivElement>(null)
 
   const handleSystemUpdate = async () => {
     if (!window.confirm('Nazploy\'u son sürüme güncellemek istediğinizden emin misiniz? Bu işlem sırasında kısa süreliğine panele erişilemeyebilir.')) {
@@ -44,6 +48,8 @@ export default function Settings() {
     setUpdateLoading(true)
     setUpdateError('')
     setUpdateSuccess('')
+    setUpdateLogs('Güncelleme işlemi başlatılıyor...')
+    setShowLogsModal(true)
     try {
       const res = await pb.send('/api/dashboard/system/update', { method: 'POST' })
       setUpdateSuccess(res.message || 'Güncelleme başarıyla başlatıldı!')
@@ -51,6 +57,7 @@ export default function Settings() {
     } catch (err: any) {
       setUpdateError(err?.message || 'Güncelleme başlatılamadı.')
       setUpdateLoading(false)
+      setShowLogsModal(false)
     }
   }
 
@@ -65,6 +72,44 @@ export default function Settings() {
     }, 1000)
     return () => clearTimeout(timer)
   }, [countdown])
+
+  useEffect(() => {
+    if (!showLogsModal) return
+
+    let active = true
+    const fetchLogs = async () => {
+      try {
+        const res = await pb.send('/api/dashboard/system/update/logs', { method: 'GET' })
+        if (active) {
+          setUpdateLogs(res.logs || 'Günlük dosyası bekleniyor...')
+        }
+      } catch (err) {
+        if (active && updateSuccess) {
+          setUpdateLogs((prev) => {
+            if (prev.includes('Sunucu yeniden başlatılıyor...')) return prev
+            return prev + '\n\n🔄 Sunucu yeniden başlatılıyor... Lütfen sayfa yenilenene kadar bekleyin.'
+          })
+        }
+      }
+    }
+
+    // Fetch immediately
+    fetchLogs()
+
+    // Poll every 1.5s
+    const interval = setInterval(fetchLogs, 1500)
+
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [showLogsModal, updateSuccess])
+
+  useEffect(() => {
+    if (showLogsModal && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [updateLogs, showLogsModal])
 
   const fetchAppStatus = async () => {
     try {
@@ -524,6 +569,56 @@ export default function Settings() {
 
         </div>
       </div>
+
+      {/* Live logs modal */}
+      {showLogsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-950 text-zinc-100 rounded-2xl border border-zinc-800 w-full max-w-3xl h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <RefreshCw className="w-5 h-5 text-indigo-400 animate-spin" />
+                <div>
+                  <h3 className="font-bold text-sm">Nazploy Güncelleme Günlüğü</h3>
+                  <p className="text-[10px] text-zinc-400 mt-0.5">setup.sh çıktısı canlı olarak izleniyor</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLogsModal(false)}
+                className="text-xs text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-900 transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+
+            {/* Modal Body (Logs Console) */}
+            <div className="flex-1 p-4 bg-zinc-900 font-mono text-[11px] leading-relaxed overflow-y-auto select-text scrollbar-thin scrollbar-thumb-zinc-800">
+              <pre className="whitespace-pre-wrap">{updateLogs}</pre>
+              <div ref={logEndRef} />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-950/80 flex items-center justify-between">
+              <div className="text-xs text-zinc-400">
+                {countdown !== null ? (
+                  <span className="text-emerald-400 font-semibold flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    Sunucu yeniden başlatılıyor. Sayfa {countdown} saniye içinde yenilenecek...
+                  </span>
+                ) : (
+                  <span>Güncelleme adımları takip ediliyor...</span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowLogsModal(false)}
+                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl px-4 py-2 text-xs font-bold transition-all"
+              >
+                Geri Dön
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

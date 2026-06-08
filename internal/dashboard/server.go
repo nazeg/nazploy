@@ -1781,6 +1781,9 @@ func HandleSystemUpdate(e *core.RequestEvent, app *pocketbase.PocketBase) error 
 		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Sistem üzerinde 'systemd-run' komutu bulunamadı. Servis cgroup dışına çıkarılamıyor."})
 	}
 
+	// Clean up old log file before running a new update
+	os.Remove("/tmp/nazploy_install.log")
+
 	// Trigger systemd-run to run the script in a separate service cgroup.
 	// This prevents the update script from being killed when it restarts the nazploy service itself.
 	cmd := exec.Command("systemd-run",
@@ -1801,4 +1804,20 @@ func HandleSystemUpdate(e *core.RequestEvent, app *pocketbase.PocketBase) error 
 		"message": "Güncelleme arka planda başlatıldı. Sunucu birkaç dakika içinde güncellenip yeniden başlatılacaktır.",
 	})
 }
+
+// HandleSystemUpdateLogs reads and returns the contents of /tmp/nazploy_install.log.
+func HandleSystemUpdateLogs(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	logPath := "/tmp/nazploy_install.log"
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		return e.JSON(http.StatusOK, map[string]string{"logs": "Güncelleme günlüğü henüz oluşturulmadı..."})
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Günlük dosyası okunamadı: " + err.Error()})
+	}
+
+	return e.JSON(http.StatusOK, map[string]string{"logs": string(data)})
+}
+
 
