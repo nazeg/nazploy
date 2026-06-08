@@ -31,6 +31,16 @@ export default function SiteForm() {
   const [githubBranches, setGithubBranches] = useState<any[]>([])
   const [reposLoading, setReposLoading] = useState(false)
   const [branchesLoading, setBranchesLoading] = useState(false)
+  const [isManualUrl, setIsManualUrl] = useState(false)
+
+  useEffect(() => {
+    if (gitRepo && githubRepos.length > 0 && githubConfigured) {
+      const exists = githubRepos.some((repo: any) => repo.html_url.toLowerCase() === gitRepo.toLowerCase() || repo.full_name.toLowerCase() === gitRepo.toLowerCase())
+      if (!exists) {
+        setIsManualUrl(true)
+      }
+    }
+  }, [gitRepo, githubRepos, githubConfigured])
 
   useEffect(() => {
     async function checkGithubStatus() {
@@ -77,8 +87,19 @@ export default function SiteForm() {
   }
 
   useEffect(() => {
-    if (gitRepo && githubConfigured) {
+    const isUrlValid = () => {
+      try {
+        const u = gitRepo.trim();
+        return u.includes('github.com/') && u.split('github.com/')[1]?.split('/').filter(Boolean).length >= 2;
+      } catch {
+        return false;
+      }
+    };
+
+    if (gitRepo && githubConfigured && isUrlValid()) {
       fetchGithubBranches(gitRepo)
+    } else {
+      setGithubBranches([])
     }
   }, [gitRepo, githubConfigured])
 
@@ -322,10 +343,23 @@ export default function SiteForm() {
             {useGitDeploy && (
               <div className="p-4 space-y-4 border-t border-gray-200 bg-white">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    GitHub Repo URL <span className="text-red-500">*</span>
-                  </label>
-                  {githubConfigured ? (
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      GitHub Repo URL <span className="text-red-500">*</span>
+                    </label>
+                    {githubConfigured && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsManualUrl(!isManualUrl)
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                      >
+                        {isManualUrl ? 'Listeden Seç' : 'Manuel URL Gir'}
+                      </button>
+                    )}
+                  </div>
+                  {githubConfigured && !isManualUrl ? (
                     <div className="relative">
                       <select
                         value={gitRepo}
@@ -366,7 +400,9 @@ export default function SiteForm() {
                   )}
                   <p className="text-[10px] text-gray-400 mt-1">
                     {githubConfigured 
-                      ? 'GitHub entegrasyonunuz aktif. Hem public hem private repolarınızı listeleyebilirsiniz.' 
+                      ? isManualUrl 
+                        ? 'Girdiğiniz repo adresi için yetkiniz varsa private depolar da çekilebilir.' 
+                        : 'GitHub entegrasyonunuz aktif. Hem public hem private repolarınızı listeleyebilirsiniz.' 
                       : 'Ayarlar sayfasından GitHub App veya erişim belirteci tanımlayarak private repolarınızı da buraya bağlayabilirsiniz.'
                     }
                   </p>

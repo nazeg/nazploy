@@ -116,6 +116,12 @@ func main() {
 			return dashboard.HandleStats(e, app)
 		})
 
+		// System Update
+		g.POST("/system/update", func(e *core.RequestEvent) error {
+			return dashboard.HandleSystemUpdate(e, app)
+		})
+
+
 		// GitHub App / PAT Integration
 		g.GET("/github/repos", func(e *core.RequestEvent) error {
 			return dashboard.HandleGetGithubRepos(e, app)

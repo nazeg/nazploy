@@ -1757,3 +1757,48 @@ func HandleGithubAppWebhook(e *core.RequestEvent, app *pocketbase.PocketBase, ng
 		"triggered": triggeredCount,
 	})
 }
+
+// HandleSystemUpdate triggers a self-update by running the setup.sh script in a transient systemd scope/service.
+func HandleSystemUpdate(e *core.RequestEvent, app *pocketbase.PocketBase) error {
+	if runtime.GOOS == "windows" {
+		return e.JSON(http.StatusBadRequest, map[string]string{"error": "Windows üzerinde otomatik güncelleme desteklenmiyor."})
+	}
+
+	// Try to find the script in common locations (/root/nazploy-src/setup.sh)
+	scriptPath := "/root/nazploy-src/setup.sh"
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		// Fallback to current working directory setup.sh if it exists
+		cwd, _ := os.Getwd()
+		localPath := filepath.Join(cwd, "setup.sh")
+		if _, errLocal := os.Stat(localPath); errLocal == nil {
+			scriptPath = localPath
+		} else {
+			return e.JSON(http.StatusBadRequest, map[string]string{"error": "setup.sh betiği bulunamadı: " + scriptPath})
+		}
+	}
+
+	if _, err := exec.LookPath("systemd-run"); err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Sistem üzerinde 'systemd-run' komutu bulunamadı. Servis cgroup dışına çıkarılamıyor."})
+	}
+
+	// Trigger systemd-run to run the script in a separate service cgroup.
+	// This prevents the update script from being killed when it restarts the nazploy service itself.
+	cmd := exec.Command("systemd-run",
+		"--description=Nazploy Self Update",
+		"bash", scriptPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Güncelleme başlatılamadı: " + err.Error() + " (Stderr: " + stderr.String() + ")",
+		})
+	}
+
+	return e.JSON(http.StatusOK, map[string]string{
+		"message": "Güncelleme arka planda başlatıldı. Sunucu birkaç dakika içinde güncellenip yeniden başlatılacaktır.",
+	})
+}
+

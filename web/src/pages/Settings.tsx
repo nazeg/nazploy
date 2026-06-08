@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import pb from '../lib/pocketbase'
-import { Lock, CheckCircle2, AlertCircle, Key, Shield, ExternalLink } from 'lucide-react'
+import { Lock, CheckCircle2, AlertCircle, Key, Shield, ExternalLink, RefreshCw } from 'lucide-react'
 
 export default function Settings() {
   const user = pb.authStore.model
@@ -30,6 +30,41 @@ export default function Settings() {
   } | null>(null)
   const [appLoading, setAppLoading] = useState(true)
   const [githubState, setGithubState] = useState('')
+
+  // System Update state
+  const [updateLoading, setUpdateLoading] = useState(false)
+  const [updateSuccess, setUpdateSuccess] = useState('')
+  const [updateError, setUpdateError] = useState('')
+  const [countdown, setCountdown] = useState<number | null>(null)
+
+  const handleSystemUpdate = async () => {
+    if (!window.confirm('Nazploy\'u son sürüme güncellemek istediğinizden emin misiniz? Bu işlem sırasında kısa süreliğine panele erişilemeyebilir.')) {
+      return
+    }
+    setUpdateLoading(true)
+    setUpdateError('')
+    setUpdateSuccess('')
+    try {
+      const res = await pb.send('/api/dashboard/system/update', { method: 'POST' })
+      setUpdateSuccess(res.message || 'Güncelleme başarıyla başlatıldı!')
+      setCountdown(30)
+    } catch (err: any) {
+      setUpdateError(err?.message || 'Güncelleme başlatılamadı.')
+      setUpdateLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown === 0) {
+      window.location.reload()
+      return
+    }
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1)
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [countdown])
 
   const fetchAppStatus = async () => {
     try {
@@ -438,6 +473,55 @@ export default function Settings() {
               )}
             </div>
           </div>
+
+          {/* System Update Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-5">
+            <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                <RefreshCw className={`w-5 h-5 ${updateLoading ? 'animate-spin' : ''}`} />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900">Sistem Güncellemesi</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Nazploy panelini GitHub üzerindeki son sürüme güncelleyin</p>
+              </div>
+            </div>
+
+            {updateError && (
+              <div className="bg-rose-50 text-rose-600 text-xs p-4 rounded-xl border border-rose-100 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <span>{updateError}</span>
+              </div>
+            )}
+            {updateSuccess && (
+              <div className="bg-emerald-50 text-emerald-600 text-xs p-4 rounded-xl border border-emerald-100 flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">{updateSuccess}</span>
+                  {countdown !== null && (
+                    <span className="text-[11px] text-emerald-700 mt-1 block">
+                      Sunucu derlenip yeniden başlatılıyor. Sayfa {countdown} saniye içinde otomatik yenilenecek...
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Bu buton sunucuda arka planda <code>setup.sh</code> betiğini çalıştırır. Sunucudaki kodlar güncellenir, frontend ve backend baştan derlenir ve Nazploy servisi yeniden başlatılır.
+              </p>
+              <button
+                type="button"
+                disabled={updateLoading}
+                onClick={handleSystemUpdate}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-2.5 px-5 text-xs font-bold transition-all shadow-sm shadow-indigo-500/10 flex items-center justify-center gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${updateLoading ? 'animate-spin' : ''}`} />
+                {updateLoading ? 'Güncelleniyor...' : 'Şimdi Güncelle'}
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
