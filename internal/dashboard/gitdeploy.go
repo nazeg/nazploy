@@ -385,6 +385,7 @@ func CloneAndBuild(app core.App, siteID string) error {
 			if rec != nil && rec.GetString("site_type") == "pocketbase" {
 				dbDir := filepath.Join("/var/lib/dashboard/databases", siteID)
 				pbMigDst := filepath.Join(dbDir, "pb_migrations")
+				os.RemoveAll(pbMigDst)
 				os.MkdirAll(pbMigDst, 0755)
 
 				if err := copyDir(pbMigSrc, pbMigDst); err != nil {
