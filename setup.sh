@@ -28,20 +28,42 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ANSI Color Codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-WHITE='\033[1;37m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
+# TTY kontrolü
+IS_TTY=0
+if [ -t 1 ]; then
+  IS_TTY=1
+fi
 
 # Installation Log File
 LOG_FILE="/tmp/nazploy_install.log"
 echo "=== Nazploy Kurulum Günlüğü ($(date)) ===" > "$LOG_FILE"
+
+if [ "$IS_TTY" -eq 0 ]; then
+  # Renkleri ve biçimlendirmeleri devre dışı bırak
+  RED=''
+  GREEN=''
+  YELLOW=''
+  BLUE=''
+  PURPLE=''
+  CYAN=''
+  WHITE=''
+  NC=''
+  BOLD=''
+  
+  # Tüm çıktıyı log dosyasına yönlendir (stdout ve stderr)
+  exec >> "$LOG_FILE" 2>&1
+else
+  # ANSI Color Codes
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  PURPLE='\033[0;35m'
+  CYAN='\033[0;36m'
+  WHITE='\033[1;37m'
+  NC='\033[0m' # No Color
+  BOLD='\033[1m'
+fi
 
 # 1. Root Yetkisi Kontrolü
 if [ "$EUID" -ne 0 ]; then
@@ -111,41 +133,56 @@ run_step() {
   local msg=$1
   shift
 
-  local spin_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-  local spin_i=0
+  if [ "$IS_TTY" -eq 1 ]; then
+    local spin_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local spin_i=0
 
-  tput civis 2>/dev/null || true  # cursor'ı gizle
+    tput civis 2>/dev/null || true  # cursor'ı gizle
 
-  # Spinner arka planda döner; PID'i global değişkene yaz
-  (
-    while true; do
-      local c="${spin_chars:$spin_i:1}"
-      echo -ne "\r\033[K  ${CYAN}${c}${NC}  $msg... "
-      spin_i=$(( (spin_i + 1) % ${#spin_chars} ))
-      sleep 0.1
-    done
-  ) &
-  _SPINNER_PID=$!
+    # Spinner arka planda döner; PID'i global değişkene yaz
+    (
+      while true; do
+        local c="${spin_chars:$spin_i:1}"
+        echo -ne "\r\033[K  ${CYAN}${c}${NC}  $msg... "
+        spin_i=$(( (spin_i + 1) % ${#spin_chars} ))
+        sleep 0.1
+      done
+    ) &
+    _SPINNER_PID=$!
+  else
+    echo "⚙️  $msg..."
+  fi
 
   # Asıl komutu çalıştır
   local exit_code=0
   "$@" >> "$LOG_FILE" 2>&1 || exit_code=$?
 
-  # Spinner'ı durdur
-  kill "$_SPINNER_PID" 2>/dev/null
-  wait "$_SPINNER_PID" 2>/dev/null || true
-  _SPINNER_PID=""
+  if [ "$IS_TTY" -eq 1 ]; then
+    # Spinner'ı durdur
+    kill "$_SPINNER_PID" 2>/dev/null
+    wait "$_SPINNER_PID" 2>/dev/null || true
+    _SPINNER_PID=""
 
-  tput cnorm 2>/dev/null || true  # cursor'ı geri getir
+    tput cnorm 2>/dev/null || true  # cursor'ı geri getir
 
-  if [ "$exit_code" -eq 0 ]; then
-    echo -e "\r\033[K  ✔️  ${GREEN}$msg${NC}"
+    if [ "$exit_code" -eq 0 ]; then
+      echo -e "\r\033[K  ✔️  ${GREEN}$msg${NC}"
+    else
+      echo -e "\r\033[K  ❌  ${RED}$msg BAŞARISIZ OLDU!${NC}"
+      echo -e "      ${YELLOW}HATA DETAYI:${NC} Son 10 satır:"
+      tail -n 10 "$LOG_FILE" | sed 's/^/      /'
+      echo -e "      ${YELLOW}Tüm kurulum günlükleri için inceleyin: ${BOLD}$LOG_FILE${NC}"
+      exit 1
+    fi
   else
-    echo -e "\r\033[K  ❌  ${RED}$msg BAŞARISIZ OLDU!${NC}"
-    echo -e "      ${YELLOW}HATA DETAYI:${NC} Son 10 satır:"
-    tail -n 10 "$LOG_FILE" | sed 's/^/      /'
-    echo -e "      ${YELLOW}Tüm kurulum günlükleri için inceleyin: ${BOLD}$LOG_FILE${NC}"
-    exit 1
+    if [ "$exit_code" -eq 0 ]; then
+      echo "✔️  $msg tamamlandı."
+    else
+      echo "❌ $msg BAŞARISIZ OLDU!"
+      echo "   HATA DETAYI: Son 10 satır:"
+      tail -n 10 "$LOG_FILE" | sed 's/^/   /'
+      exit 1
+    fi
   fi
 }
 
@@ -243,7 +280,9 @@ install_go() {
 }
 
 # -- AKIŞ BAŞLANGICI --
-clear
+if [ "$IS_TTY" -eq 1 ]; then
+  clear
+fi
 print_banner
 print_system_diagnostics
 

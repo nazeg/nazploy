@@ -1788,6 +1788,7 @@ func HandleSystemUpdate(e *core.RequestEvent, app *pocketbase.PocketBase) error 
 	// This prevents the update script from being killed when it restarts the nazploy service itself.
 	cmd := exec.Command("systemd-run",
 		"--description=Nazploy Self Update",
+		"--setenv=TERM=xterm",
 		"bash", scriptPath,
 	)
 
