@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import pb from '../lib/pocketbase'
 import { Lock, CheckCircle2, AlertCircle, Key, Shield, ExternalLink, RefreshCw } from 'lucide-react'
 
 export default function Settings() {
+  const navigate = useNavigate()
   const user = pb.authStore.model
   const initial = user?.email ? user.email.charAt(0).toUpperCase() : 'N'
 
@@ -111,12 +113,24 @@ export default function Settings() {
     }
   }, [updateLogs, showLogsModal])
 
+  const handleAuthError = (err: any) => {
+    if (err?.status === 401 || err?.originalError?.status === 401) {
+      pb.authStore.clear()
+      navigate('/login')
+      return true
+    }
+    return false
+  }
+
   const fetchAppStatus = async () => {
     try {
       const res = await pb.send('/api/dashboard/github/app-status', { method: 'GET' })
       setAppStatus(res)
-    } catch (err) {
-      console.error('GitHub App status fetching failed:', err)
+    } catch (err: any) {
+      if (!handleAuthError(err)) {
+        console.error('GitHub App status fetching failed:', err)
+        setGithubError('GitHub App durumu alınamadı. Lütfen sayfayı yenileyin.')
+      }
     } finally {
       setAppLoading(false)
     }
@@ -126,8 +140,10 @@ export default function Settings() {
     try {
       const res = await pb.send('/api/dashboard/github/generate-state', { method: 'POST' })
       setGithubState(res.state)
-    } catch (err) {
-      console.error('GitHub App state generation failed:', err)
+    } catch (err: any) {
+      if (!handleAuthError(err)) {
+        console.error('GitHub App state generation failed:', err)
+      }
     }
   }
 
