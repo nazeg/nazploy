@@ -306,8 +306,14 @@ func CloneAndBuild(app core.App, siteID string) error {
 		pkgPath := filepath.Join(cloneDir, "package.json")
 		if _, err := os.Stat(pkgPath); err == nil {
 			// Install dependencies
+			// Use a per-deploy npm cache directory inside tmpDir to avoid
+			// EACCES errors caused by root-owned files in /root/.npm
+			npmCacheDir := filepath.Join(tmpDir, ".npm-cache")
 			logWrite("npm install çalıştırılıyor...")
-			installCmd := createSecureCommand(deployUser, cloneDir, "npm", "install", "--prefer-offline", "--no-audit", "--no-fund")
+			installCmd := createSecureCommand(deployUser, cloneDir, "npm", "install",
+				"--prefer-offline", "--no-audit", "--no-fund",
+				"--cache", npmCacheDir,
+			)
 			installCmd.Stdout = &safeBuf
 			installCmd.Stderr = &safeBuf
 			if err := runCommandWithTimeout(installCmd, 10*time.Minute); err != nil {
