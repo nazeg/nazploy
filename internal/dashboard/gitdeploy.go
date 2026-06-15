@@ -195,7 +195,11 @@ func CloneAndBuild(app core.App, siteID string) error {
 	}
 
 	// Setup environment variables securely (passing token via GIT_CONFIG_COUNT/KEY/VALUE to prevent leakage)
-	gitEnv := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	gitEnv := append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_NOSYSTEM=1",   // /etc/gitconfig okunmasın
+		"GIT_CONFIG_GLOBAL=/dev/null", // ~/.config/git/* okunmasın → permission uyarısı kaybolur
+	)
 	if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
 		authString := "x-access-token:" + githubToken
 		base64Auth := base64.StdEncoding.EncodeToString([]byte(authString))
