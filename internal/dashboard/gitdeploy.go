@@ -199,6 +199,8 @@ func CloneAndBuild(app core.App, siteID string) error {
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_CONFIG_NOSYSTEM=1",   // /etc/gitconfig okunmasın
 		"GIT_CONFIG_GLOBAL=/dev/null", // ~/.config/git/* okunmasın → permission uyarısı kaybolur
+		"GIT_HTTP_LOW_SPEED_LIMIT=1000",
+		"GIT_HTTP_LOW_SPEED_TIME=20",
 	)
 	if githubToken != "" && strings.HasPrefix(repo, "https://github.com/") {
 		authString := "x-access-token:" + githubToken
@@ -277,7 +279,7 @@ func CloneAndBuild(app core.App, siteID string) error {
 			return "varsayılan"
 		}())
 
-		args := []string{"clone", "--depth", "1"}
+		args := []string{"clone", "--depth", "1", "--single-branch", "--no-tags"}
 		if branch != "" {
 			args = append(args, "--branch", branch)
 		}
