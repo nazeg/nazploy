@@ -287,7 +287,7 @@ func CloneAndBuild(app core.App, siteID string) error {
 		cmd.Env = gitEnv
 		cmd.Stdout = &safeBuf
 		cmd.Stderr = &safeBuf
-		if err := runCommandWithTimeout(cmd, 5*time.Minute); err != nil {
+		if err := runCommandWithTimeout(cmd, 30*time.Second); err != nil {
 			return fmt.Errorf("git clone başarısız: %w", err)
 		}
 
